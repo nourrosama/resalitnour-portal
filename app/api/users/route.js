@@ -38,7 +38,6 @@ export async function POST(req) {
     governorate,
     role: 'user',
     isActive: true,
-    mustChangePassword: true,
     createdBy: session.user.id,
   })
 

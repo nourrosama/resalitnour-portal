@@ -1,7 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 export default function AdminUsersPage() {
+  const router = useRouter()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -103,13 +105,12 @@ export default function AdminUsersPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">كلمة المرور المؤقتة <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">كلمة المرور <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={form.password}
                   onChange={e => setForm({ ...form, password: e.target.value })}
                   className="input-field"
-                  placeholder="سيُطلب من المستخدم تغييرها"
                   required
                 />
               </div>
@@ -165,6 +166,7 @@ export default function AdminUsersPage() {
                   <th className="text-right px-4 py-3 font-semibold text-gray-700">المحافظة</th>
                   <th className="text-center px-4 py-3 font-semibold text-gray-700">الدور</th>
                   <th className="text-center px-4 py-3 font-semibold text-gray-700">الحالة</th>
+                  <th className="text-center px-4 py-3 font-semibold text-gray-700">ملف المنظمة</th>
                   <th className="text-center px-4 py-3 font-semibold text-gray-700">إجراءات</th>
                 </tr>
               </thead>
@@ -185,6 +187,16 @@ export default function AdminUsersPage() {
                         <span className="badge badge-active">نشط</span>
                       ) : (
                         <span className="badge badge-rejected">معطل</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center border-b">
+                      {u.role !== 'admin' && (
+                        <button
+                          onClick={() => router.push(`/admin/users/${u._id}/profile`)}
+                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          ملف المنظمة
+                        </button>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center border-b">
