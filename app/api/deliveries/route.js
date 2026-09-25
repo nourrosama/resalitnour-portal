@@ -9,6 +9,9 @@ import {
   generateDeliveryPrefix, generateCaseCode, sendBeneficiaryCode, migrateLegacyDeliveries, sanitizeForUser,
 } from '../../../lib/deliveryCode'
 
+// Sending waits for the gateway phone to confirm (~12s); allow longer than the default on hosts like Vercel
+export const maxDuration = 30
+
 // GET /api/deliveries
 //   ?status=open|closed   open = scheduled, closed = delivered/confirmed
 //   ?month=YYYY-MM        filter (closed: by closing date, otherwise by creation date)

@@ -6,6 +6,9 @@ import Delivery from '../../../../../models/Delivery'
 import '../../../../../models/Case'
 import { checkSmsgateMessage } from '../../../../../lib/sms'
 
+// Sending waits for the gateway phone to confirm (~12s); allow longer than the default on hosts like Vercel
+export const maxDuration = 30
+
 // POST /api/deliveries/[id]/sms-refresh (admin)
 // Ask SMS Gateway again for the real state of messages still waiting on the phone
 export async function POST(req, { params }) {
