@@ -192,6 +192,14 @@ export default function AdminUsersPage() {
                     <td className="px-4 py-3 text-center border-b">
                       {u.role !== 'admin' && (
                         <button
+                          onClick={() => router.push(`/admin/users/${u._id}`)}
+                          className="text-xs text-primary-700 hover:text-primary-900 font-medium ml-3"
+                        >
+                          فتح لوحة المستخدم
+                        </button>
+                      )}
+                      {u.role !== 'admin' && (
+                        <button
                           onClick={() => router.push(`/admin/users/${u._id}/profile`)}
                           className="text-xs text-blue-600 hover:text-blue-800 font-medium"
                         >

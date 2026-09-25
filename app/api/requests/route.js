@@ -14,6 +14,7 @@ export async function GET(req) {
 
   let query = {}
   if (session.user.role !== 'admin') query.submittedBy = session.user.id
+  else if (searchParams.get('userId')) query.submittedBy = searchParams.get('userId')
   if (type) query.type = type
 
   const requests = await Request.find(query)

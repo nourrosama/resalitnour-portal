@@ -25,6 +25,7 @@ export async function POST(req) {
 
   await connectDB()
   const body = await req.json()
+  if (!body.caseId) delete body.caseId
   const message = await Message.create({ ...body, from: session.user.id })
   return NextResponse.json(message, { status: 201 })
 }

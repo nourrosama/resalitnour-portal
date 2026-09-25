@@ -1,7 +1,7 @@
 import mongoose from 'mongoose'
 
 const MessageSchema = new mongoose.Schema({
-  caseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Case', required: true },
+  caseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Case' }, // optional
   from: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   to: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   subject: { type: String, required: true },

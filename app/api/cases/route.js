@@ -18,6 +18,9 @@ export async function GET(req) {
   // Non-admins only see their own cases
   if (session.user.role !== 'admin') {
     query.submittedBy = session.user.id
+  } else if (searchParams.get('userId')) {
+    // Admin working inside a specific user's workspace
+    query.submittedBy = searchParams.get('userId')
   }
   if (status && status !== 'all') query.status = status
   if (caseType) query.caseType = caseType

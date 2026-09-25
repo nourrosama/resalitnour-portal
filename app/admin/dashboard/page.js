@@ -1,109 +1,119 @@
 'use client'
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 
-const statusLabels = {
-  total: 'الإجمالي',
-  active: 'نشطة',
-  approved: 'معتمدة',
-  pending: 'قيد المراجعة',
-  rejected: 'مرفوضة',
-}
-
-function StatsTable({ title, data }) {
-  if (!data || data.length === 0) return null
-  return (
-    <div className="card mb-6">
-      <h2 className="text-lg font-bold text-gray-800 mb-4">{title}</h2>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-primary-50">
-              <th className="text-right px-4 py-3 font-semibold text-gray-700 border-b">نوع الحالة</th>
-              {Object.keys(statusLabels).map(key => (
-                <th key={key} className="text-center px-4 py-3 font-semibold text-gray-700 border-b">
-                  {statusLabels[key]}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((row, i) => (
-              <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                <td className="px-4 py-3 font-medium text-gray-800 border-b">{row.label}</td>
-                {Object.keys(statusLabels).map(key => (
-                  <td key={key} className="text-center px-4 py-3 text-gray-600 border-b">
-                    {row[key] || 0}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
-export default function AdminDashboardPage() {
-  const [stats, setStats] = useState(null)
+// Admin home: pick a user (organization) to manage.
+// Each user's cases/requests/deliveries live in their own workspace at /admin/users/[id]
+export default function AdminHomePage() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [showInactive, setShowInactive] = useState(false)
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/admin/stats').then(r => r.json()),
-      fetch('/api/users').then(r => r.json()),
-    ]).then(([s, u]) => {
-      setStats(s)
-      setUsers(Array.isArray(u) ? u : [])
-      setLoading(false)
-    }).catch(() => setLoading(false))
+    fetch('/api/admin/users')
+      .then(r => r.json())
+      .then(data => {
+        setUsers(Array.isArray(data) ? data : [])
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
   }, [])
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">جاري التحميل...</div>
-      </div>
-    )
-  }
+  const filtered = users.filter(u => {
+    if (!showInactive && u.isActive === false) return false
+    if (!search) return true
+    return [u.name, u.email, u.organization, u.governorate].some(v => v?.includes(search))
+  })
 
-  const totals = stats?.totals || {}
+  const totalCases = users.reduce((n, u) => n + (u.stats?.total || 0), 0)
+  const totalPending = users.reduce((n, u) => n + (u.stats?.pending || 0), 0)
   const activeUsers = users.filter(u => u.isActive !== false).length
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">لوحة التحكم</h1>
-        <p className="text-gray-500 mt-1">نظرة عامة على جميع الحالات والمستخدمين</p>
+      <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">المستخدمون</h1>
+          <p className="text-gray-500 mt-1">اختر مستخدمًا لإدارة حالاته وطلباته</p>
+        </div>
+        <Link href="/admin/users" className="btn-primary text-sm">+ إضافة / إدارة الحسابات</Link>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+      {/* Summary */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="card text-center">
-          <p className="text-3xl font-bold text-primary-700">{totals.total || 0}</p>
+          <p className="text-3xl font-bold text-indigo-600">{activeUsers}</p>
+          <p className="text-sm text-gray-500 mt-1">مستخدمون نشطون</p>
+        </div>
+        <div className="card text-center">
+          <p className="text-3xl font-bold text-primary-700">{totalCases}</p>
           <p className="text-sm text-gray-500 mt-1">إجمالي الحالات</p>
         </div>
         <div className="card text-center">
-          <p className="text-3xl font-bold text-green-600">{totals.active || 0}</p>
-          <p className="text-sm text-gray-500 mt-1">حالات نشطة</p>
-        </div>
-        <div className="card text-center">
-          <p className="text-3xl font-bold text-blue-600">{totals.approved || 0}</p>
-          <p className="text-sm text-gray-500 mt-1">معتمدة</p>
-        </div>
-        <div className="card text-center">
-          <p className="text-3xl font-bold text-yellow-600">{totals.pending || 0}</p>
+          <p className="text-3xl font-bold text-yellow-600">{totalPending}</p>
           <p className="text-sm text-gray-500 mt-1">قيد المراجعة</p>
-        </div>
-        <div className="card text-center">
-          <p className="text-3xl font-bold text-indigo-600">{activeUsers}</p>
-          <p className="text-sm text-gray-500 mt-1">المستخدمون</p>
         </div>
       </div>
 
-      <StatsTable title="الحالات الشهرية" data={stats?.monthly} />
-      <StatsTable title="الحالات الموسمية" data={stats?.seasonal} />
+      <div className="flex gap-4 mb-4 flex-wrap items-center">
+        <input
+          type="text"
+          placeholder="بحث بالاسم أو الجهة أو المحافظة أو البريد..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="input-field flex-1 min-w-48"
+        />
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} />
+          عرض الحسابات المعطلة
+        </label>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-12 text-gray-500">جاري التحميل...</div>
+      ) : filtered.length === 0 ? (
+        <div className="card text-center py-12 text-gray-400">لا يوجد مستخدمون</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filtered.map(u => (
+            <Link
+              key={u._id}
+              href={`/admin/users/${u._id}`}
+              className="card block hover:shadow-md hover:border-primary-300 border border-transparent transition-all"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-full bg-primary-100 text-primary-800 flex items-center justify-center text-lg font-bold shrink-0">
+                  {u.name?.[0] || 'م'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-gray-900 truncate">{u.name}</p>
+                  <p className="text-sm text-gray-500 truncate">{u.organization || u.email}</p>
+                </div>
+                {u.isActive === false && <span className="badge badge-rejected">معطل</span>}
+              </div>
+              <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
+                <span>{u.governorate || '—'}</span>
+                <span className="truncate mr-2" dir="ltr">{u.email}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center border-t pt-3">
+                <div>
+                  <p className="text-lg font-bold text-primary-700">{u.stats?.total || 0}</p>
+                  <p className="text-xs text-gray-500">الحالات</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-blue-600">{u.stats?.approved || 0}</p>
+                  <p className="text-xs text-gray-500">معتمدة</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-yellow-600">{u.stats?.pending || 0}</p>
+                  <p className="text-xs text-gray-500">قيد المراجعة</p>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

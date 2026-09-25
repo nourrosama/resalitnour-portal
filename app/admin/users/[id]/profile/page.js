@@ -457,7 +457,7 @@ export default function AdminUserProfilePage() {
           align-items: center;
           justify-content: space-between;
           padding: 10px 16px;
-          position: sticky;
+          position: relative;
           top: 0;
           z-index: 10;
         }
@@ -630,7 +630,7 @@ export default function AdminUserProfilePage() {
         {/* Top bar */}
         <div className="topbar">
           <div className="topbar-left">
-            <button className="btn-back" onClick={() => router.push('/admin/users')}>
+            <button className="btn-back" onClick={() => router.push(`/admin/users/${userId}`)}>
               ← المستخدمون
             </button>
             <div>

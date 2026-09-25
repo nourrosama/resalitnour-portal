@@ -12,7 +12,12 @@ export async function GET(req) {
   await connectDB()
 
   // For regular users, scope to their own cases
-  const userFilter = session.user.role === 'admin' ? {} : { submittedBy: session.user.id }
+  // Admins can scope to one user with ?userId=
+  const { searchParams } = new URL(req.url)
+  const targetUserId = searchParams.get('userId')
+  const userFilter = session.user.role === 'admin'
+    ? (targetUserId ? { submittedBy: targetUserId } : {})
+    : { submittedBy: session.user.id }
 
   // Build stats per case type
   const allCases = await Case.find(userFilter)
@@ -22,6 +27,7 @@ export async function GET(req) {
       const typeCases = allCases.filter((c) => c.caseType === type)
       return {
         type,
+        label: type,
         total: typeCases.length,
         active: typeCases.filter((c) => c.status === 'active').length,
         approved: typeCases.filter((c) => c.status === 'approved').length,

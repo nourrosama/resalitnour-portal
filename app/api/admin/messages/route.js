@@ -11,7 +11,10 @@ export async function GET(req) {
   }
 
   await connectDB()
-  const messages = await Message.find({ from: session.user.id })
+  const { searchParams } = new URL(req.url)
+  const query = { from: session.user.id }
+  if (searchParams.get('userId')) query.to = searchParams.get('userId')
+  const messages = await Message.find(query)
     .populate('to', 'name email')
     .populate('caseId', 'code name')
     .sort({ createdAt: -1 })
