@@ -362,8 +362,16 @@ export default function AdminUserDeliveriesPage() {
         <div className="p-3 rounded-lg mb-4 text-sm border bg-red-50 border-red-200 text-red-800">
           <b>خدمة الرسائل غير مفعلة:</b>{' '}
           {smsCfg.provider === 'none'
-            ? 'لا يوجد SMS_PROVIDER في ملف ‎.env.local، لذلك لن تُرسل أي رسالة فعلية. أضف الإعدادات ثم أعد تشغيل الخادم، أو استخدم أزرار واتساب/SMS.'
-            : `الإعدادات ناقصة في ‎.env.local: ${smsCfg.missing.join(', ')}`}
+            ? 'الخادم لا يرى المتغير SMS_PROVIDER، لذلك لن تُرسل أي رسالة فعلية. على الجهاز المحلي أضفه في ‎.env.local وأعد التشغيل؛ على Vercel أضفه في Settings → Environment Variables (بيئة Production) ثم Redeploy.'
+            : smsCfg.unknownProvider
+            ? `قيمة SMS_PROVIDER غير معروفة ("${smsCfg.provider}") — يجب أن تكون smsgate`
+            : `متغيرات ناقصة على الخادم: ${smsCfg.missing.join(', ')}`}
+          {smsCfg.seen && (
+            <div className="mt-2 text-xs font-mono" dir="ltr">
+              server{smsCfg.deployment ? ` (${smsCfg.deployment})` : ''} sees:{' '}
+              {Object.entries(smsCfg.seen).map(([k, v]) => `${k} ${v ? '✓' : '✗'}`).join('   ')}
+            </div>
+          )}
         </div>
       )}
 
