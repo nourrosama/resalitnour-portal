@@ -394,7 +394,7 @@ export default function ProfilePage() {
 
         /* Top bar */
         .topbar {
-          background: #1a5c38;
+          background: #0369a1;
           color: #fff;
           display: flex;
           align-items: center;
@@ -419,7 +419,7 @@ export default function ProfilePage() {
           box-shadow: 0 1px 4px rgba(0,0,0,.08);
           text-align: center;
         }
-        .profile-org-name { font-size: 18px; font-weight: 700; color: #1a5c38; margin-bottom: 4px; }
+        .profile-org-name { font-size: 18px; font-weight: 700; color: #0369a1; margin-bottom: 4px; }
         .profile-reg { font-size: 13px; color: #555; margin-bottom: 12px; }
         .btn-edit {
           background: #c8a84b; color: #fff; border: none; border-radius: 20px;
@@ -433,7 +433,7 @@ export default function ProfilePage() {
           margin: 0 16px 8px;
         }
         .btn-save {
-          background: #1a5c38; color: #fff; border: none; border-radius: 20px;
+          background: #0369a1; color: #fff; border: none; border-radius: 20px;
           padding: 8px 28px; font-size: 13px; cursor: pointer; font-weight: 600;
         }
         .btn-save:disabled { opacity: .6; cursor: not-allowed; }
@@ -457,7 +457,7 @@ export default function ProfilePage() {
         .section-header {
           width: 100%; background: none; border: none; cursor: pointer;
           display: flex; align-items: center; justify-content: space-between;
-          padding: 14px 16px; font-size: 14px; font-weight: 600; color: #1a5c38;
+          padding: 14px 16px; font-size: 14px; font-weight: 600; color: #0369a1;
           text-align: right;
         }
         .section-header:hover { background: #f9f9f9; }
@@ -479,7 +479,7 @@ export default function ProfilePage() {
           font-size: 13px; margin-top: 4px; font-family: inherit;
           direction: rtl; text-align: right;
         }
-        .field-input:focus { outline: none; border-color: #1a5c38; }
+        .field-input:focus { outline: none; border-color: #0369a1; }
         textarea.field-input { resize: vertical; }
 
         /* Badges */
@@ -497,7 +497,7 @@ export default function ProfilePage() {
           display: flex; align-items: center; gap: 5px;
           font-size: 13px; cursor: pointer; color: #333;
         }
-        .radio-label input { accent-color: #1a5c38; cursor: pointer; }
+        .radio-label input { accent-color: #0369a1; cursor: pointer; }
 
         /* Person cards */
         .person-card {
@@ -508,14 +508,14 @@ export default function ProfilePage() {
           display: flex; justify-content: space-between; align-items: center;
           margin-bottom: 8px;
         }
-        .person-header strong { font-size: 14px; color: #1a5c38; }
+        .person-header strong { font-size: 14px; color: #0369a1; }
         .btn-remove {
           background: #f8d7da; color: #721c24; border: none; border-radius: 50%;
           width: 22px; height: 22px; cursor: pointer; font-size: 12px;
           display: flex; align-items: center; justify-content: center;
         }
         .btn-add {
-          background: #1a5c38; color: #fff; border: none; border-radius: 6px;
+          background: #0369a1; color: #fff; border: none; border-radius: 6px;
           padding: 7px 16px; font-size: 13px; cursor: pointer; margin-top: 8px;
           width: 100%;
         }
@@ -527,7 +527,7 @@ export default function ProfilePage() {
         }
         .spinner {
           width: 36px; height: 36px; border: 3px solid #e0e0e0;
-          border-top-color: #1a5c38; border-radius: 50%;
+          border-top-color: #0369a1; border-radius: 50%;
           animation: spin .7s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }

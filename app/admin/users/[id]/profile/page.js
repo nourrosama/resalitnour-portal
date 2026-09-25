@@ -451,7 +451,7 @@ export default function AdminUserProfilePage() {
 
         /* Top bar */
         .topbar {
-          background: #1a3a5c;
+          background: #0369a1;
           color: #fff;
           display: flex;
           align-items: center;
@@ -490,7 +490,7 @@ export default function AdminUserProfilePage() {
           gap: 10px;
         }
         .profile-user-info { flex: 1; }
-        .profile-org-name { font-size: 17px; font-weight: 700; color: #1a3a5c; margin-bottom: 2px; }
+        .profile-org-name { font-size: 17px; font-weight: 700; color: #0369a1; margin-bottom: 2px; }
         .profile-username { font-size: 12px; color: #777; }
         .profile-status {
           font-size: 11px; padding: 3px 10px; border-radius: 10px; font-weight: 600;
@@ -520,16 +520,16 @@ export default function AdminUserProfilePage() {
         /* Action bar */
         .header-actions { display: flex; gap: 8px; align-items: center; }
         .btn-edit {
-          background: #1a3a5c; color: #fff; border: none; border-radius: 20px;
+          background: #0369a1; color: #fff; border: none; border-radius: 20px;
           padding: 7px 22px; font-size: 13px; cursor: pointer; font-weight: 600;
         }
-        .btn-edit:hover { background: #152e4d; }
+        .btn-edit:hover { background: #075985; }
         .action-bar {
           display: flex; gap: 8px; justify-content: center;
           margin: 0 16px 8px;
         }
         .btn-save {
-          background: #1a3a5c; color: #fff; border: none; border-radius: 20px;
+          background: #0369a1; color: #fff; border: none; border-radius: 20px;
           padding: 8px 28px; font-size: 13px; cursor: pointer; font-weight: 600;
         }
         .btn-save:disabled { opacity: .6; cursor: not-allowed; }
@@ -557,7 +557,7 @@ export default function AdminUserProfilePage() {
         .section-header {
           width: 100%; background: none; border: none; cursor: pointer;
           display: flex; align-items: center; justify-content: space-between;
-          padding: 14px 16px; font-size: 14px; font-weight: 600; color: #1a3a5c;
+          padding: 14px 16px; font-size: 14px; font-weight: 600; color: #0369a1;
           text-align: right;
         }
         .section-header:hover { background: #f9f9f9; }
@@ -579,7 +579,7 @@ export default function AdminUserProfilePage() {
           font-size: 13px; margin-top: 4px; font-family: inherit;
           direction: rtl; text-align: right;
         }
-        .field-input:focus { outline: none; border-color: #1a3a5c; }
+        .field-input:focus { outline: none; border-color: #0369a1; }
         textarea.field-input { resize: vertical; }
 
         /* Badges */
@@ -594,7 +594,7 @@ export default function AdminUserProfilePage() {
         /* Radio */
         .radio-group { display: flex; gap: 16px; }
         .radio-label { display: flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; color: #333; }
-        .radio-label input { accent-color: #1a3a5c; cursor: pointer; }
+        .radio-label input { accent-color: #0369a1; cursor: pointer; }
 
         /* Person cards */
         .person-card {
@@ -604,14 +604,14 @@ export default function AdminUserProfilePage() {
         .person-header {
           display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
         }
-        .person-header strong { font-size: 14px; color: #1a3a5c; }
+        .person-header strong { font-size: 14px; color: #0369a1; }
         .btn-remove {
           background: #f8d7da; color: #721c24; border: none; border-radius: 50%;
           width: 22px; height: 22px; cursor: pointer; font-size: 12px;
           display: flex; align-items: center; justify-content: center;
         }
         .btn-add {
-          background: #1a3a5c; color: #fff; border: none; border-radius: 6px;
+          background: #0369a1; color: #fff; border: none; border-radius: 6px;
           padding: 7px 16px; font-size: 13px; cursor: pointer; margin-top: 8px; width: 100%;
         }
 
@@ -620,7 +620,7 @@ export default function AdminUserProfilePage() {
         .page-loading { display: flex; align-items: center; justify-content: center; height: 100vh; }
         .spinner {
           width: 36px; height: 36px; border: 3px solid #e0e0e0;
-          border-top-color: #1a3a5c; border-radius: 50%;
+          border-top-color: #0369a1; border-radius: 50%;
           animation: spin .7s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }

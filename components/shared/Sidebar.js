@@ -15,7 +15,7 @@ function NavItem({ href, icon, label, children }) {
         <button
           onClick={() => setOpen(!open)}
           className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-            isActive ? 'bg-primary-700 text-white' : 'text-gray-200 hover:bg-primary-700/50'
+            isActive ? 'bg-white/20 text-white' : 'text-white/90 hover:bg-white/10'
           }`}
         >
           <span className="flex items-center gap-3">
@@ -27,7 +27,7 @@ function NavItem({ href, icon, label, children }) {
           </svg>
         </button>
         {open && (
-          <ul className="mt-1 mr-4 space-y-1 border-r border-primary-600 pr-3">
+          <ul className="mt-1 mr-4 space-y-1 border-r border-white/30 pr-3">
             {children}
           </ul>
         )}
@@ -40,7 +40,7 @@ function NavItem({ href, icon, label, children }) {
       <Link
         href={href}
         className={`flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-          pathname === href ? 'bg-primary-700 text-white' : 'text-gray-200 hover:bg-primary-700/50'
+          pathname === href ? 'bg-white/20 text-white' : 'text-white/90 hover:bg-white/10'
         }`}
       >
         {icon}
@@ -57,7 +57,7 @@ function SubNavItem({ href, label }) {
       <Link
         href={href}
         className={`block py-2 px-3 rounded-lg text-sm transition-colors ${
-          pathname === href ? 'bg-primary-600 text-white' : 'text-gray-300 hover:text-white hover:bg-primary-700/40'
+          pathname === href ? 'bg-white/25 text-white' : 'text-white/80 hover:text-white hover:bg-white/10'
         }`}
       >
         {label}
@@ -169,9 +169,9 @@ export default function Sidebar({ isAdmin = false }) {
   )
 
   return (
-    <div className="w-64 min-h-screen bg-primary-900 flex flex-col">
+    <div className="w-64 min-h-screen bg-gradient-to-b from-primary-600 to-primary-800 flex flex-col">
       {/* Logo */}
-      <div className="p-5 border-b border-primary-700">
+      <div className="p-5 border-b border-white/20">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center">
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -180,7 +180,7 @@ export default function Sidebar({ isAdmin = false }) {
           </div>
           <div>
             <p className="text-white font-bold text-sm leading-tight">رسالة نور للتنمية</p>
-            <p className="text-primary-300 text-xs">{isAdmin ? 'لوحة الإدارة' : 'بوابة المستخدم'}</p>
+            <p className="text-primary-100 text-xs">{isAdmin ? 'لوحة الإدارة' : 'بوابة المستخدم'}</p>
           </div>
         </div>
       </div>
@@ -191,11 +191,11 @@ export default function Sidebar({ isAdmin = false }) {
           <>
             <Link
               href="/admin/dashboard"
-              className="flex items-center gap-2 px-4 py-2 mb-3 rounded-lg text-sm text-primary-200 hover:text-white hover:bg-primary-700/50 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 mb-3 rounded-lg text-sm text-primary-50 hover:text-white hover:bg-white/10 transition-colors"
             >
               <span>→</span> كل المستخدمين
             </Link>
-            <p className="px-4 mb-2 text-xs text-primary-300">إدارة المستخدم</p>
+            <p className="px-4 mb-2 text-xs text-primary-100">إدارة المستخدم</p>
             <ul className="space-y-1">{workspaceNavItems}</ul>
           </>
         ) : (
@@ -206,19 +206,19 @@ export default function Sidebar({ isAdmin = false }) {
       </nav>
 
       {/* User info + logout */}
-      <div className="p-4 border-t border-primary-700">
+      <div className="p-4 border-t border-white/20">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
+          <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-white text-sm font-bold">
             {session?.user?.name?.[0] || 'م'}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-white text-sm font-medium truncate">{session?.user?.name}</p>
-            <p className="text-primary-300 text-xs truncate">{session?.user?.email}</p>
+            <p className="text-primary-100 text-xs truncate">{session?.user?.email}</p>
           </div>
         </div>
         <button
           onClick={() => signOut({ callbackUrl: '/login' })}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-primary-300 hover:text-white hover:bg-primary-700/50 transition-colors"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-primary-100 hover:text-white hover:bg-white/10 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
