@@ -19,6 +19,7 @@ export default function AdminUserCasesPage() {
   const [selected, setSelected] = useState(null)
   const [actionForm, setActionForm] = useState({ status: '', adminNote: '', familyMembers: '', points: '' })
   const [saving, setSaving] = useState(false)
+  const [actionError, setActionError] = useState('')
 
   useEffect(() => {
     fetch(`/api/cases?userId=${userId}`)
@@ -32,6 +33,7 @@ export default function AdminUserCasesPage() {
 
   async function handleAction(e) {
     e.preventDefault()
+    setActionError('')
     setSaving(true)
     const res = await fetch(`/api/cases/${selected._id}`, {
       method: 'PATCH',
@@ -43,6 +45,9 @@ export default function AdminUserCasesPage() {
       const updated = await res.json()
       setCases(cases.map(c => c._id === selected._id ? { ...c, ...updated } : c))
       setSelected(null)
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setActionError(data.error || 'حدث خطأ أثناء الحفظ')
     }
   }
 
@@ -104,13 +109,13 @@ export default function AdminUserCasesPage() {
                       <td className="px-4 py-3 font-medium text-gray-800 border-b">{c.name}</td>
                       <td className="px-4 py-3 text-gray-600 border-b text-xs">{c.caseType}</td>
                       <td className="px-4 py-3 text-center text-gray-700 border-b">{c.familyMembers ?? '—'}</td>
-                      <td className="px-4 py-3 text-center font-semibold text-primary-800 border-b">{c.points ?? '—'}</td>
+                      <td className="px-4 py-3 text-center font-semibold text-primary-800 border-b">{c.points ?? <span className="text-xs font-normal text-amber-600">لم تُحدد</span>}</td>
                       <td className="px-4 py-3 text-center border-b">
                         <span className={`badge ${s.cls}`}>{s.label}</span>
                       </td>
                       <td className="px-4 py-3 text-center border-b">
                         <button
-                          onClick={() => { setSelected(c); setActionForm({ status: c.status, adminNote: c.adminNote || '', familyMembers: c.familyMembers ?? '', points: c.points ?? '' }) }}
+                          onClick={() => { setSelected(c); setActionError(''); setActionForm({ status: c.status, adminNote: c.adminNote || '', familyMembers: c.familyMembers ?? '', points: c.points ?? '' }) }}
                           className="text-xs text-primary-700 hover:text-primary-900 font-medium"
                         >
                           تحديث
@@ -150,20 +155,24 @@ export default function AdminUserCasesPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">عدد أفراد الأسرة</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">عدد أفراد الأسرة <span className="text-red-500">*</span></label>
                     <input
                       type="number"
                       min="0"
+                      step="1"
+                      required
                       value={actionForm.familyMembers}
                       onChange={e => setActionForm({ ...actionForm, familyMembers: e.target.value })}
                       className="input-field"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">عدد النقاط</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">عدد النقاط <span className="text-red-500">*</span></label>
                     <input
                       type="number"
                       min="0"
+                      step="1"
+                      required
                       value={actionForm.points}
                       onChange={e => setActionForm({ ...actionForm, points: e.target.value })}
                       className="input-field"
@@ -179,6 +188,7 @@ export default function AdminUserCasesPage() {
                     rows={3}
                   />
                 </div>
+                {actionError && <p className="text-red-600 text-sm bg-red-50 p-2 rounded-lg">{actionError}</p>}
                 <div className="flex gap-3">
                   <button type="submit" className="btn-primary flex-1" disabled={saving}>
                     {saving ? 'جاري الحفظ...' : 'حفظ'}

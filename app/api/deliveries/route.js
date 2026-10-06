@@ -42,7 +42,7 @@ export async function GET(req) {
   }
 
   const deliveries = await Delivery.find(query)
-    .populate('beneficiaries.caseId', 'code name caseType phone points familyMembers')
+    .populate('beneficiaries.caseId', isAdmin ? 'code name caseType phone points familyMembers' : 'code name caseType phone familyMembers')
     .populate('deliveredBy', 'name')
     .sort({ createdAt: -1 })
 

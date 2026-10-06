@@ -1,34 +1,8 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { MONTHLY_TYPES, SEASONAL_TYPES, GOVERNORATES } from '../../../../lib/caseOptions'
 
-const MONTHLY_TYPES = [
-  'الحالات الشهرية',
-  'الحاله الشهرية (المرأة المعيلة)',
-  'الحاله الشهرية (العجز والإعاقة)',
-  'الحاله الشهرية (الطلبة الوافدين)',
-  'الحاله الشهرية (كبار السن)',
-  'الحاله الشهرية (التكية)',
-  'مشروع التقزم',
-]
-
-const SEASONAL_TYPES = [
-  'الحالات الموسمية',
-  'الحاله الموسمية (المرأة المعيلة)',
-  'الحاله الموسمية (العجز والإعاقة)',
-  'الحاله الموسمية (الطلبة الوافدين)',
-  'الحاله الموسمية (كبار السن)',
-  'مشروع التكية الموسمية',
-]
-
-const GOVERNORATES = [
-  'القاهرة', 'الجيزة', 'الإسكندرية', 'الدقهلية', 'البحر الأحمر',
-  'البحيرة', 'الفيوم', 'الغربية', 'الإسماعيلية', 'المنوفية',
-  'المنيا', 'القليوبية', 'الوادي الجديد', 'السويس', 'أسوان',
-  'أسيوط', 'بني سويف', 'بورسعيد', 'دمياط', 'الشرقية',
-  'جنوب سيناء', 'كفر الشيخ', 'مطروح', 'الأقصر', 'قنا',
-  'شمال سيناء', 'سوهاج',
-]
 
 export default function NewCasePage() {
   const router = useRouter()
@@ -43,7 +17,6 @@ export default function NewCasePage() {
     address: '',
     comment: '',
     familyMembers: '',
-    points: '',
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -55,7 +28,7 @@ export default function NewCasePage() {
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
-    if (!form.name || !form.caseType) {
+    if (!form.name || !form.caseType || form.familyMembers === '') {
       setError('يرجى ملء الحقول المطلوبة')
       return
     }
@@ -144,25 +117,18 @@ export default function NewCasePage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">عدد أفراد الأسرة</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                عدد أفراد الأسرة <span className="text-red-500">*</span>
+              </label>
               <input
                 type="number"
                 name="familyMembers"
                 value={form.familyMembers}
                 onChange={handleChange}
                 className="input-field"
-                min="0"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">عدد النقاط</label>
-              <input
-                type="number"
-                name="points"
-                value={form.points}
-                onChange={handleChange}
-                className="input-field"
-                min="0"
+                min="1"
+                step="1"
+                required
               />
             </div>
           </div>
