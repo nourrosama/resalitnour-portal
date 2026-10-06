@@ -51,6 +51,24 @@ export default function AdminUserCasesPage() {
     }
   }
 
+  const [deleting, setDeleting] = useState(null)
+  const [notice, setNotice] = useState('')
+
+  async function handleDelete(c) {
+    if (!confirm(`حذف الحالة ${c.code} — ${c.name} نهائيًا؟\nسيتم حذف طلباتها وإزالتها من التسليمات. لا يمكن التراجع.`)) return
+    setDeleting(c._id)
+    setNotice('')
+    const res = await fetch(`/api/cases/${c._id}`, { method: 'DELETE' })
+    setDeleting(null)
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) {
+      setCases(cases.filter(x => x._id !== c._id))
+      setNotice(`تم حذف الحالة ${c.code}`)
+    } else {
+      setNotice(data.error || 'تعذر حذف الحالة')
+    }
+  }
+
   const filtered = cases.filter(c => {
     const matchSearch = !search || c.name?.includes(search) || c.code?.includes(search)
     const matchStatus = !filterStatus || c.status === filterStatus
@@ -60,6 +78,10 @@ export default function AdminUserCasesPage() {
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">إدارة الحالات</h1>
+
+      {notice && (
+        <div className="p-3 rounded-lg mb-4 text-sm border bg-gray-50 border-gray-200 text-gray-800">{notice}</div>
+      )}
 
       <div className="card">
         <div className="flex gap-4 mb-4 flex-wrap">
@@ -119,6 +141,13 @@ export default function AdminUserCasesPage() {
                           className="text-xs text-primary-700 hover:text-primary-900 font-medium"
                         >
                           تحديث
+                        </button>
+                        <button
+                          onClick={() => handleDelete(c)}
+                          disabled={deleting === c._id}
+                          className="text-xs text-red-600 hover:text-red-800 font-medium mr-3"
+                        >
+                          {deleting === c._id ? '...' : 'حذف'}
                         </button>
                       </td>
                     </tr>

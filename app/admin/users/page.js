@@ -53,6 +53,20 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function handleDelete(u) {
+    if (!confirm(`حذف المستخدم "${u.name}" نهائيًا؟\nسيتم حذف كل حالاته وتسليماته وطلباته ورسائله وملف المنظمة. لا يمكن التراجع.`)) return
+    setError('')
+    setSuccess('')
+    const res = await fetch(`/api/admin/users/${u._id}`, { method: 'DELETE' })
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) {
+      setUsers(users.filter(x => x._id !== u._id))
+      setSuccess(`تم حذف المستخدم ${u.name} وكل بياناته`)
+    } else {
+      setError(data.error || 'تعذر حذف المستخدم')
+    }
+  }
+
   async function handleActivate(id) {
     const res = await fetch(`/api/users/${id}`, {
       method: 'PATCH',
@@ -77,6 +91,10 @@ export default function AdminUsersPage() {
         <div className="bg-green-50 border border-green-200 text-green-700 p-3 rounded-lg mb-4 text-sm">
           {success}
         </div>
+      )}
+
+      {error && !showForm && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg mb-4 text-sm">{error}</div>
       )}
 
       {showForm && (
@@ -224,6 +242,14 @@ export default function AdminUsersPage() {
                             تفعيل
                           </button>
                         )
+                      )}
+                      {u.role !== 'admin' && (
+                        <button
+                          onClick={() => handleDelete(u)}
+                          className="text-xs text-red-700 hover:text-red-900 font-bold mr-3"
+                        >
+                          حذف
+                        </button>
                       )}
                     </td>
                   </tr>

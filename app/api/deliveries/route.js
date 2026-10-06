@@ -8,6 +8,7 @@ import User from '../../../models/User'
 import {
   generateDeliveryPrefix, generateCaseCode, sendBeneficiaryCode, migrateLegacyDeliveries, sanitizeForUser,
 } from '../../../lib/deliveryCode'
+import { itemsTotalPoints, casesPoints } from '../../../lib/foodItems'
 
 // Sending waits for the gateway phone to confirm (~12s); allow longer than the default on hosts like Vercel
 export const maxDuration = 30
@@ -51,7 +52,7 @@ export async function GET(req) {
 
 // POST /api/deliveries (admin)
 // { userId, beneficiaries: [{ caseId, phone }], deliveryType, items: [{ name, quantity, points }],
-//   amount, location, scheduledFor, notes, sendSms }
+//   location, scheduledFor, notes, sendSms }
 export async function POST(req) {
   const session = await getServerSession(authOptions)
   if (!session || session.user.role !== 'admin') {
@@ -81,7 +82,8 @@ export async function POST(req) {
       points: i.points === '' || i.points == null || !Number.isFinite(pts) || pts < 0 ? undefined : pts,
     }
   })
-  const totalPoints = cleanItems.reduce((s, i) => s + (i.points || 0), 0)
+  const totalPoints = itemsTotalPoints(cleanItems) // Σ الكمية × عدد النقاط
+  const deliveryPoints = casesPoints(cases)       // Σ نقاط الحالات المستفيدة
 
   const codePrefix = await generateDeliveryPrefix(userId)
   const used = new Set()
@@ -89,10 +91,10 @@ export async function POST(req) {
     deliveryType: body.deliveryType,
     location: body.location,
     notes: body.notes,
-    amount: body.amount || undefined,
     scheduledFor: body.scheduledFor || undefined,
     items: cleanItems,
     totalPoints,
+    deliveryPoints,
     userId,
     codePrefix,
     status: 'scheduled',

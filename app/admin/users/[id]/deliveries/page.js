@@ -2,7 +2,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import { useParams } from 'next/navigation'
 import { whatsappLink, smsLink, isValidEgyptMobile } from '../../../../../lib/phone'
-import { FOOD_ITEMS, OTHER_ITEM, itemsToText } from '../../../../../lib/foodItems'
+import { FOOD_ITEMS, OTHER_ITEM, itemsToText, itemPoints, itemsTotalPoints, casesPoints } from '../../../../../lib/foodItems'
 
 const statusMap = {
   scheduled: { label: 'مفتوح', cls: 'badge-pending' },
@@ -18,7 +18,7 @@ const smsMap = {
   not_sent: { label: 'لم يُرسل', cls: 'badge-pending' },
 }
 const emptyForm = {
-  deliveryType: '', location: '', scheduledFor: '', amount: '', notes: '', sendSms: true,
+  deliveryType: '', location: '', scheduledFor: '', notes: '', sendSms: true,
 }
 
 function smsText(b) {
@@ -35,16 +35,17 @@ function ManualSendButtons({ phone, text }) {
   )
 }
 
-function itemsPoints(items) {
-  return (items || []).reduce((s, i) => s + (Number(i.points) || 0), 0)
+// عدد النقاط of a delivery: stored value, or (old deliveries) the sum of its cases' points
+function deliveryBudget(d) {
+  return d.deliveryPoints || casesPoints((d.beneficiaries || []).map(b => b.caseId))
 }
-// case has fewer points than the delivery needs
-function lacksPoints(c, needed) {
-  return needed > 0 && (Number(c?.points) || 0) < needed
+// إجمالي نقاط التسليم: stored value, or computed from the items
+function deliveryItemsTotal(d) {
+  return d.totalPoints || itemsTotalPoints(d.items)
 }
 
 // ---------- الأصناف picker ----------
-function ItemsPicker({ items, setItems }) {
+function ItemsPicker({ items, setItems, budget = 0 }) {
   const [other, setOther] = useState('')
   const [showOther, setShowOther] = useState(false)
   const chosen = new Set(items.map(i => i.name))
@@ -91,7 +92,9 @@ function ItemsPicker({ items, setItems }) {
             <div key={it.name} className="flex items-center gap-2 bg-primary-50 border border-primary-200 rounded-lg px-2 py-1">
               <span className="text-sm font-medium text-primary-900">{it.name}</span>
               <input
-                type="text"
+                type="number"
+                min="0"
+                step="any"
                 value={it.quantity}
                 onChange={e => setItems(items.map((x, i) => (i === idx ? { ...x, quantity: e.target.value } : x)))}
                 placeholder="الكمية"
@@ -105,20 +108,34 @@ function ItemsPicker({ items, setItems }) {
                 placeholder="عدد النقاط"
                 className="w-24 text-xs border border-gray-300 rounded px-1.5 py-1"
               />
+              <span className="text-xs text-gray-600 whitespace-nowrap">= <b className="text-primary-800">{itemPoints(it)}</b></span>
               <button type="button" onClick={() => setItems(items.filter((_, i) => i !== idx))} className="text-gray-400 hover:text-red-600 text-lg leading-none">×</button>
             </div>
           ))}
         </div>
       )}
-      {items.length > 0 && (
-        <p className="mt-2 text-sm text-gray-700">إجمالي نقاط التسليم: <b className="text-primary-800">{itemsPoints(items)}</b></p>
-      )}
+      {items.length > 0 && (() => {
+        const total = itemsTotalPoints(items)
+        return (
+          <>
+            <p className="mt-2 text-sm text-gray-700">
+              إجمالي نقاط التسليم (الكمية × عدد النقاط): <b className="text-primary-800">{total}</b>
+              <span className="text-gray-500"> من {budget}</span>
+            </p>
+            {total > budget && (
+              <p className="mt-1 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">
+                ⚠ إجمالي نقاط التسليم ({total}) أكبر من عدد نقاط التسليم ({budget}) بفارق {total - budget}
+              </p>
+            )}
+          </>
+        )
+      })()}
     </div>
   )
 }
 
 // ---------- cases (beneficiaries) picker ----------
-function CasesPicker({ cases, selected, setSelected, neededPoints = 0 }) {
+function CasesPicker({ cases, selected, setSelected }) {
   const [search, setSearch] = useState('')
   const shown = cases.filter(c => !search || c.name?.includes(search) || c.code?.includes(search) || c.phone?.includes(search))
 
@@ -156,11 +173,6 @@ function CasesPicker({ cases, selected, setSelected, neededPoints = 0 }) {
                   {c.caseType} — النقاط: <b className="text-gray-700">{c.points ?? 0}</b>
                   {c.familyMembers != null && <> — أفراد الأسرة: {c.familyMembers}</>}
                 </p>
-                {on && lacksPoints(c, neededPoints) && (
-                  <p className="text-xs text-red-600 font-medium mt-0.5">
-                    ⚠ نقاط التسليم ({neededPoints}) أكبر من نقاط هذه الحالة ({c.points ?? 0})
-                  </p>
-                )}
               </div>
               {on && (
                 <div className="w-44">
@@ -210,11 +222,6 @@ function BeneficiariesTable({ delivery, onSend, sendingKey, lastSms }) {
             <tr key={b._id} className="border-b last:border-0">
               <td className="px-2 py-2">
                 <span className="font-mono text-primary-700">{b.caseId?.code}</span> {b.caseId?.name}
-                {lacksPoints(b.caseId, delivery.totalPoints || itemsPoints(delivery.items)) && (
-                  <div className="text-[11px] text-red-600 mt-0.5">
-                    ⚠ نقاط التسليم ({delivery.totalPoints || itemsPoints(delivery.items)}) أكبر من نقاط الحالة ({b.caseId?.points ?? 0})
-                  </div>
-                )}
               </td>
               <td className="px-2 py-2 font-mono font-bold text-primary-800 text-sm tracking-wider">{b.code}</td>
               <td className="px-2 py-2" dir="ltr">
@@ -364,6 +371,21 @@ export default function AdminUserDeliveriesPage() {
     }
   }
 
+  async function handleDelete(delivery) {
+    if (!confirm(`حذف التسليم ${delivery.requestNo || ''} نهائيًا مع كل أكواده؟ لا يمكن التراجع.`)) return
+    setSendingKey('d' + delivery._id)
+    const res = await fetch(`/api/deliveries/${delivery._id}`, { method: 'DELETE' })
+    setSendingKey(null)
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) {
+      setDeliveries(deliveries.filter(d => d._id !== delivery._id))
+      if (expanded === delivery._id) setExpanded(null)
+      setNotice({ type: 'ok', text: `تم حذف التسليم ${delivery.requestNo || ''}` })
+    } else {
+      setNotice({ type: 'err', text: data.error || 'تعذر حذف التسليم' })
+    }
+  }
+
   async function handleRefresh(delivery) {
     setSendingKey('r' + delivery._id)
     const res = await fetch(`/api/deliveries/${delivery._id}/sms-refresh`, { method: 'POST' })
@@ -376,6 +398,8 @@ export default function AdminUserDeliveriesPage() {
       setNotice({ type: 'err', text: data.error || 'تعذر تحديث الحالة' })
     }
   }
+
+  const selectedPoints = casesPoints(cases.filter(c => selected[c._id] !== undefined))
 
   const shown = deliveries.filter(d =>
     filter === 'all' ? true : filter === 'open' ? d.status === 'scheduled' : d.status !== 'scheduled'
@@ -435,28 +459,20 @@ export default function AdminUserDeliveriesPage() {
                 <input type="date" value={form.scheduledFor} onChange={e => setForm({ ...form, scheduledFor: e.target.value })} className="input-field" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">المبلغ (ج.م)</label>
-                <input type="number" min="0" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} className="input-field" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">عدد النقاط</label>
+                <input type="text" readOnly value={selectedPoints} className="input-field bg-gray-50 font-semibold text-primary-800 cursor-not-allowed" />
+                <p className="text-xs text-gray-500 mt-1">يُحسب تلقائيًا: مجموع نقاط الحالات المختارة ({Object.keys(selected).length})</p>
               </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">الأصناف</label>
-              <ItemsPicker items={items} setItems={setItems} />
+              <ItemsPicker items={items} setItems={setItems} budget={selectedPoints} />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">الحالات المستفيدة من هذا التسليم</label>
-              <CasesPicker cases={cases} selected={selected} setSelected={setSelected} neededPoints={itemsPoints(items)} />
-              {(() => {
-                const need = itemsPoints(items)
-                const short = cases.filter(c => selected[c._id] !== undefined && lacksPoints(c, need))
-                return short.length > 0 && (
-                  <p className="mt-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">
-                    ⚠ عدد نقاط هذا التسليم ({need}) أكبر من نقاط {short.length} من الحالات المختارة: {short.map(c => c.name).join('، ')}
-                  </p>
-                )
-              })()}
+              <CasesPicker cases={cases} selected={selected} setSelected={setSelected} />
             </div>
 
             <div className="bg-gray-50 border rounded-lg p-3 text-sm text-gray-600">
@@ -525,11 +541,17 @@ export default function AdminUserDeliveriesPage() {
                         <td className="px-3 py-3 text-center font-mono font-bold text-primary-800 border-b">{d.codePrefix}</td>
                         <td className="px-3 py-3 text-gray-600 border-b text-xs max-w-xs">{itemsToText(d.items) || '—'}</td>
                         <td className="px-3 py-3 text-center border-b">
-                          <span className="font-semibold text-primary-800">{d.totalPoints || itemsPoints(d.items) || '—'}</span>
                           {(() => {
-                            const need = d.totalPoints || itemsPoints(d.items)
-                            const n = (d.beneficiaries || []).filter(b => lacksPoints(b.caseId, need)).length
-                            return n > 0 && <div className="text-[11px] text-red-600">⚠ أكبر من نقاط {n} حالة</div>
+                            const budget = deliveryBudget(d)
+                            const used = deliveryItemsTotal(d)
+                            return (
+                              <>
+                                <span className="font-semibold text-primary-800">{budget}</span>
+                                <div className={`text-[11px] ${used > budget ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                                  الأصناف: {used}{used > budget ? ' ⚠ أكبر من عدد النقاط' : ''}
+                                </div>
+                              </>
+                            )
                           })()}
                         </td>
                         <td className="px-3 py-3 text-center border-b">{got} / {total}</td>
@@ -541,6 +563,9 @@ export default function AdminUserDeliveriesPage() {
                         <td className="px-3 py-3 text-center border-b whitespace-nowrap">
                           <button onClick={() => setExpanded(isOpen ? null : d._id)} className="text-xs text-primary-700 hover:text-primary-900 font-medium">
                             {isOpen ? 'إخفاء' : 'المستفيدون والأكواد'}
+                          </button>
+                          <button onClick={() => handleDelete(d)} disabled={sendingKey === 'd' + d._id} className="text-xs text-red-600 hover:text-red-800 font-medium mr-3">
+                            {sendingKey === 'd' + d._id ? '...' : 'حذف'}
                           </button>
                         </td>
                       </tr>

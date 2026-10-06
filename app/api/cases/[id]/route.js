@@ -4,6 +4,7 @@ import { authOptions } from '../../../../lib/auth'
 import connectDB from '../../../../lib/mongodb'
 import Case from '../../../../models/Case'
 import { USER_EDITABLE_FIELDS, toCount } from '../../../../lib/caseOptions'
+import { deleteCases } from '../../../../lib/cascadeDelete'
 
 export async function GET(req, { params }) {
   const session = await getServerSession(authOptions)
@@ -88,6 +89,7 @@ export async function DELETE(req, { params }) {
   }
 
   await connectDB()
-  await Case.findByIdAndDelete(params.id)
-  return NextResponse.json({ message: 'تم الحذف' })
+  const result = await deleteCases([params.id])
+  if (!result.cases) return NextResponse.json({ error: 'الحالة غير موجودة' }, { status: 404 })
+  return NextResponse.json({ message: 'تم حذف الحالة', ...result })
 }
