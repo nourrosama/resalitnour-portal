@@ -39,6 +39,8 @@ const CaseSchema = new mongoose.Schema({
   governorate: { type: String, enum: GOVERNORATES },
   address: { type: String },
   comment: { type: String },
+  familyMembers: { type: Number, min: 0 }, // عدد أفراد الأسرة
+  points: { type: Number, min: 0 },        // عدد النقاط
   // Status tracking
   status: {
     type: String,
@@ -64,5 +66,10 @@ CaseSchema.pre('save', async function (next) {
   this.updatedAt = new Date()
   next()
 })
+
+// In dev, hot reload keeps the previously compiled model; drop it if it predates familyMembers/points
+if (mongoose.models.Case && !mongoose.models.Case.schema.path('points')) {
+  mongoose.deleteModel('Case')
+}
 
 export default mongoose.models.Case || mongoose.model('Case', CaseSchema)

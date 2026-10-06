@@ -42,6 +42,8 @@ export default function NewCasePage() {
     governorate: '',
     address: '',
     comment: '',
+    familyMembers: '',
+    points: '',
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -136,6 +138,31 @@ export default function NewCasePage() {
                 value={form.passportNumber}
                 onChange={handleChange}
                 className="input-field"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">عدد أفراد الأسرة</label>
+              <input
+                type="number"
+                name="familyMembers"
+                value={form.familyMembers}
+                onChange={handleChange}
+                className="input-field"
+                min="0"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">عدد النقاط</label>
+              <input
+                type="number"
+                name="points"
+                value={form.points}
+                onChange={handleChange}
+                className="input-field"
+                min="0"
               />
             </div>
           </div>

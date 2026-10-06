@@ -42,7 +42,7 @@ export async function GET(req) {
   }
 
   const deliveries = await Delivery.find(query)
-    .populate('beneficiaries.caseId', 'code name caseType phone')
+    .populate('beneficiaries.caseId', 'code name caseType phone points familyMembers')
     .populate('deliveredBy', 'name')
     .sort({ createdAt: -1 })
 
@@ -50,7 +50,7 @@ export async function GET(req) {
 }
 
 // POST /api/deliveries (admin)
-// { userId, beneficiaries: [{ caseId, phone }], deliveryType, items: [{ name, quantity }],
+// { userId, beneficiaries: [{ caseId, phone }], deliveryType, items: [{ name, quantity, points }],
 //   amount, location, scheduledFor, notes, sendSms }
 export async function POST(req) {
   const session = await getServerSession(authOptions)
@@ -73,6 +73,16 @@ export async function POST(req) {
   }
   const caseById = Object.fromEntries(cases.map(c => [String(c._id), c]))
 
+  const cleanItems = items.filter(i => i?.name?.trim()).map(i => {
+    const pts = Number(i.points)
+    return {
+      name: i.name.trim(),
+      quantity: String(i.quantity ?? '').trim() || undefined,
+      points: i.points === '' || i.points == null || !Number.isFinite(pts) || pts < 0 ? undefined : pts,
+    }
+  })
+  const totalPoints = cleanItems.reduce((s, i) => s + (i.points || 0), 0)
+
   const codePrefix = await generateDeliveryPrefix(userId)
   const used = new Set()
   const delivery = new Delivery({
@@ -81,7 +91,8 @@ export async function POST(req) {
     notes: body.notes,
     amount: body.amount || undefined,
     scheduledFor: body.scheduledFor || undefined,
-    items: items.filter(i => i?.name?.trim()).map(i => ({ name: i.name.trim(), quantity: i.quantity?.trim() || undefined })),
+    items: cleanItems,
+    totalPoints,
     userId,
     codePrefix,
     status: 'scheduled',
@@ -105,7 +116,7 @@ export async function POST(req) {
   }
 
   const populated = await Delivery.findById(delivery._id)
-    .populate('beneficiaries.caseId', 'code name caseType phone')
+    .populate('beneficiaries.caseId', 'code name caseType phone points familyMembers')
     .populate('deliveredBy', 'name')
   return NextResponse.json({ delivery: populated, sms }, { status: 201 })
 }

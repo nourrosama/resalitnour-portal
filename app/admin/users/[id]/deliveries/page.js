@@ -35,6 +35,14 @@ function ManualSendButtons({ phone, text }) {
   )
 }
 
+function itemsPoints(items) {
+  return (items || []).reduce((s, i) => s + (Number(i.points) || 0), 0)
+}
+// case has fewer points than the delivery needs
+function lacksPoints(c, needed) {
+  return needed > 0 && (Number(c?.points) || 0) < needed
+}
+
 // ---------- الأصناف picker ----------
 function ItemsPicker({ items, setItems }) {
   const [other, setOther] = useState('')
@@ -43,7 +51,7 @@ function ItemsPicker({ items, setItems }) {
 
   function add(name) {
     if (!name || chosen.has(name)) return
-    setItems([...items, { name, quantity: '' }])
+    setItems([...items, { name, quantity: '', points: '' }])
   }
 
   return (
@@ -89,17 +97,28 @@ function ItemsPicker({ items, setItems }) {
                 placeholder="الكمية"
                 className="w-20 text-xs border border-gray-300 rounded px-1.5 py-1"
               />
+              <input
+                type="number"
+                min="0"
+                value={it.points ?? ''}
+                onChange={e => setItems(items.map((x, i) => (i === idx ? { ...x, points: e.target.value } : x)))}
+                placeholder="عدد النقاط"
+                className="w-24 text-xs border border-gray-300 rounded px-1.5 py-1"
+              />
               <button type="button" onClick={() => setItems(items.filter((_, i) => i !== idx))} className="text-gray-400 hover:text-red-600 text-lg leading-none">×</button>
             </div>
           ))}
         </div>
+      )}
+      {items.length > 0 && (
+        <p className="mt-2 text-sm text-gray-700">إجمالي نقاط التسليم: <b className="text-primary-800">{itemsPoints(items)}</b></p>
       )}
     </div>
   )
 }
 
 // ---------- cases (beneficiaries) picker ----------
-function CasesPicker({ cases, selected, setSelected }) {
+function CasesPicker({ cases, selected, setSelected, neededPoints = 0 }) {
   const [search, setSearch] = useState('')
   const shown = cases.filter(c => !search || c.name?.includes(search) || c.code?.includes(search) || c.phone?.includes(search))
 
@@ -133,7 +152,15 @@ function CasesPicker({ cases, selected, setSelected }) {
               <input type="checkbox" checked={on} onChange={() => toggle(c)} />
               <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggle(c)}>
                 <p className="text-sm font-medium text-gray-800 truncate">{c.name} <span className="font-mono text-xs text-primary-700">{c.code}</span></p>
-                <p className="text-xs text-gray-500 truncate">{c.caseType}</p>
+                <p className="text-xs text-gray-500 truncate">
+                  {c.caseType} — النقاط: <b className="text-gray-700">{c.points ?? 0}</b>
+                  {c.familyMembers != null && <> — أفراد الأسرة: {c.familyMembers}</>}
+                </p>
+                {on && lacksPoints(c, neededPoints) && (
+                  <p className="text-xs text-red-600 font-medium mt-0.5">
+                    ⚠ نقاط التسليم ({neededPoints}) أكبر من نقاط هذه الحالة ({c.points ?? 0})
+                  </p>
+                )}
               </div>
               {on && (
                 <div className="w-44">
@@ -183,6 +210,11 @@ function BeneficiariesTable({ delivery, onSend, sendingKey, lastSms }) {
             <tr key={b._id} className="border-b last:border-0">
               <td className="px-2 py-2">
                 <span className="font-mono text-primary-700">{b.caseId?.code}</span> {b.caseId?.name}
+                {lacksPoints(b.caseId, delivery.totalPoints || itemsPoints(delivery.items)) && (
+                  <div className="text-[11px] text-red-600 mt-0.5">
+                    ⚠ نقاط التسليم ({delivery.totalPoints || itemsPoints(delivery.items)}) أكبر من نقاط الحالة ({b.caseId?.points ?? 0})
+                  </div>
+                )}
               </td>
               <td className="px-2 py-2 font-mono font-bold text-primary-800 text-sm tracking-wider">{b.code}</td>
               <td className="px-2 py-2" dir="ltr">
@@ -415,7 +447,16 @@ export default function AdminUserDeliveriesPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">الحالات المستفيدة من هذا التسليم</label>
-              <CasesPicker cases={cases} selected={selected} setSelected={setSelected} />
+              <CasesPicker cases={cases} selected={selected} setSelected={setSelected} neededPoints={itemsPoints(items)} />
+              {(() => {
+                const need = itemsPoints(items)
+                const short = cases.filter(c => selected[c._id] !== undefined && lacksPoints(c, need))
+                return short.length > 0 && (
+                  <p className="mt-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">
+                    ⚠ عدد نقاط هذا التسليم ({need}) أكبر من نقاط {short.length} من الحالات المختارة: {short.map(c => c.name).join('، ')}
+                  </p>
+                )
+              })()}
             </div>
 
             <div className="bg-gray-50 border rounded-lg p-3 text-sm text-gray-600">
@@ -462,6 +503,7 @@ export default function AdminUserDeliveriesPage() {
                   <th className="text-right px-3 py-3 font-semibold text-gray-700">نوع التسليم</th>
                   <th className="text-center px-3 py-3 font-semibold text-gray-700">حروف الكود</th>
                   <th className="text-right px-3 py-3 font-semibold text-gray-700">الأصناف</th>
+                  <th className="text-center px-3 py-3 font-semibold text-gray-700">عدد النقاط</th>
                   <th className="text-center px-3 py-3 font-semibold text-gray-700">المستفيدون</th>
                   <th className="text-center px-3 py-3 font-semibold text-gray-700">الحالة</th>
                   <th className="text-center px-3 py-3 font-semibold text-gray-700">تاريخ التسليم</th>
@@ -482,6 +524,14 @@ export default function AdminUserDeliveriesPage() {
                         <td className="px-3 py-3 text-gray-800 font-medium border-b">{d.deliveryType}</td>
                         <td className="px-3 py-3 text-center font-mono font-bold text-primary-800 border-b">{d.codePrefix}</td>
                         <td className="px-3 py-3 text-gray-600 border-b text-xs max-w-xs">{itemsToText(d.items) || '—'}</td>
+                        <td className="px-3 py-3 text-center border-b">
+                          <span className="font-semibold text-primary-800">{d.totalPoints || itemsPoints(d.items) || '—'}</span>
+                          {(() => {
+                            const need = d.totalPoints || itemsPoints(d.items)
+                            const n = (d.beneficiaries || []).filter(b => lacksPoints(b.caseId, need)).length
+                            return n > 0 && <div className="text-[11px] text-red-600">⚠ أكبر من نقاط {n} حالة</div>
+                          })()}
+                        </td>
                         <td className="px-3 py-3 text-center border-b">{got} / {total}</td>
                         <td className="px-3 py-3 text-center border-b"><span className={`badge ${s.cls}`}>{s.label}</span></td>
                         <td className="px-3 py-3 text-center text-gray-500 border-b text-xs">
@@ -496,7 +546,7 @@ export default function AdminUserDeliveriesPage() {
                       </tr>
                       {isOpen && (
                         <tr>
-                          <td colSpan={8} className="bg-primary-50/40 border-b px-4 py-3">
+                          <td colSpan={9} className="bg-primary-50/40 border-b px-4 py-3">
                             <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
                               <p className="text-sm font-semibold text-gray-700">المستفيدون ({total})</p>
                               {d.beneficiaries.some(b => b.smsStatus === 'queued') && (

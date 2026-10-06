@@ -15,6 +15,7 @@ import mongoose from 'mongoose'
 const ItemSchema = new mongoose.Schema({
   name: { type: String, required: true },
   quantity: { type: String }, // free text, e.g. "2 كيلو"
+  points: { type: Number, min: 0 }, // عدد النقاط لهذا الصنف
 }, { _id: false })
 
 const BeneficiarySchema = new mongoose.Schema({
@@ -39,6 +40,7 @@ const DeliverySchema = new mongoose.Schema({
   deliveryType: { type: String, required: true }, // اسم الطلب / نوع التسليم
   items: [ItemSchema], // الأصناف
   amount: { type: Number },
+  totalPoints: { type: Number, default: 0 }, // مجموع نقاط الأصناف
   location: { type: String }, // مكان التسليم
   scheduledFor: { type: Date }, // شهر/سنة التسليم
   notes: { type: String },
@@ -68,7 +70,7 @@ DeliverySchema.pre('save', async function (next) {
 
 // In dev, hot reload keeps the previously compiled model in memory. If that cached model
 // was built from an older schema (no beneficiaries[]), drop it so the new schema is used.
-if (mongoose.models.Delivery && !mongoose.models.Delivery.schema.path('beneficiaries.smsState')) {
+if (mongoose.models.Delivery && (!mongoose.models.Delivery.schema.path('beneficiaries.smsState') || !mongoose.models.Delivery.schema.path('totalPoints'))) {
   mongoose.deleteModel('Delivery')
 }
 

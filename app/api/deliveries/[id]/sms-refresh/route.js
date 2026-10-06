@@ -32,7 +32,7 @@ export async function POST(req, { params }) {
   await delivery.save()
 
   const populated = await Delivery.findById(delivery._id)
-    .populate('beneficiaries.caseId', 'code name caseType phone')
+    .populate('beneficiaries.caseId', 'code name caseType phone points familyMembers')
     .populate('deliveredBy', 'name')
   return NextResponse.json({ sms, delivery: populated })
 }

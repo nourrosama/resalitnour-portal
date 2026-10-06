@@ -36,12 +36,25 @@ export async function PATCH(req, { params }) {
   }
 
   const updateData = { ...body, updatedAt: new Date() }
+  // عدد أفراد الأسرة / عدد النقاط: empty clears the value
+  const unset = {}
+  for (const k of ['familyMembers', 'points']) {
+    if (!(k in body)) continue
+    const n = Number(body[k])
+    if (body[k] === '' || body[k] == null || !Number.isFinite(n) || n < 0) {
+      delete updateData[k]
+      unset[k] = 1
+    } else {
+      updateData[k] = n
+    }
+  }
   if (body.status && session.user.role === 'admin') {
     updateData.reviewedBy = session.user.id
     updateData.reviewedAt = new Date()
   }
 
-  const updated = await Case.findByIdAndUpdate(params.id, updateData, { new: true })
+  const update = Object.keys(unset).length ? { $set: updateData, $unset: unset } : updateData
+  const updated = await Case.findByIdAndUpdate(params.id, update, { new: true })
   return NextResponse.json(updated)
 }
 

@@ -41,6 +41,10 @@ export async function POST(req) {
 
   await connectDB()
   const body = await req.json()
+  for (const k of ['familyMembers', 'points']) {
+    const n = Number(body[k])
+    body[k] = body[k] === '' || body[k] == null || !Number.isFinite(n) || n < 0 ? undefined : n
+  }
 
   const newCase = await Case.create({
     ...body,

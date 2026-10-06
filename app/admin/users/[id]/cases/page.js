@@ -17,7 +17,7 @@ export default function AdminUserCasesPage() {
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [selected, setSelected] = useState(null)
-  const [actionForm, setActionForm] = useState({ status: '', adminNote: '' })
+  const [actionForm, setActionForm] = useState({ status: '', adminNote: '', familyMembers: '', points: '' })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -89,6 +89,8 @@ export default function AdminUserCasesPage() {
                   <th className="text-right px-4 py-3 font-semibold text-gray-700">الكود</th>
                   <th className="text-right px-4 py-3 font-semibold text-gray-700">الاسم</th>
                   <th className="text-right px-4 py-3 font-semibold text-gray-700">نوع الحالة</th>
+                  <th className="text-center px-4 py-3 font-semibold text-gray-700">عدد أفراد الأسرة</th>
+                  <th className="text-center px-4 py-3 font-semibold text-gray-700">عدد النقاط</th>
                   <th className="text-center px-4 py-3 font-semibold text-gray-700">الحالة</th>
                   <th className="text-center px-4 py-3 font-semibold text-gray-700">إجراء</th>
                 </tr>
@@ -101,12 +103,14 @@ export default function AdminUserCasesPage() {
                       <td className="px-4 py-3 font-mono text-primary-700 font-medium border-b">{c.code}</td>
                       <td className="px-4 py-3 font-medium text-gray-800 border-b">{c.name}</td>
                       <td className="px-4 py-3 text-gray-600 border-b text-xs">{c.caseType}</td>
+                      <td className="px-4 py-3 text-center text-gray-700 border-b">{c.familyMembers ?? '—'}</td>
+                      <td className="px-4 py-3 text-center font-semibold text-primary-800 border-b">{c.points ?? '—'}</td>
                       <td className="px-4 py-3 text-center border-b">
                         <span className={`badge ${s.cls}`}>{s.label}</span>
                       </td>
                       <td className="px-4 py-3 text-center border-b">
                         <button
-                          onClick={() => { setSelected(c); setActionForm({ status: c.status, adminNote: c.adminNote || '' }) }}
+                          onClick={() => { setSelected(c); setActionForm({ status: c.status, adminNote: c.adminNote || '', familyMembers: c.familyMembers ?? '', points: c.points ?? '' }) }}
                           className="text-xs text-primary-700 hover:text-primary-900 font-medium"
                         >
                           تحديث
@@ -143,6 +147,28 @@ export default function AdminUserCasesPage() {
                       <option key={k} value={k}>{v.label}</option>
                     ))}
                   </select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">عدد أفراد الأسرة</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={actionForm.familyMembers}
+                      onChange={e => setActionForm({ ...actionForm, familyMembers: e.target.value })}
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">عدد النقاط</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={actionForm.points}
+                      onChange={e => setActionForm({ ...actionForm, points: e.target.value })}
+                      className="input-field"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">ملاحظة الإدارة</label>
