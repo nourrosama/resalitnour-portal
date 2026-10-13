@@ -16,6 +16,18 @@ const ItemSchema = new mongoose.Schema({
   name: { type: String, required: true },
   quantity: { type: String }, // free text, e.g. "2 كيلو"
   points: { type: Number, min: 0 }, // عدد النقاط للوحدة — نقاط الصنف = الكمية × عدد النقاط
+  unit: { type: String },
+  stockItemId: { type: mongoose.Schema.Types.ObjectId, ref: 'StockItem' }, // the المخزن row it came from
+}, { _id: false })
+
+// What one beneficiary actually took at "تسليم المستفيد"
+const TakenItemSchema = new mongoose.Schema({
+  itemIndex: { type: Number, required: true }, // index in delivery.items
+  stockItemId: { type: mongoose.Schema.Types.ObjectId, ref: 'StockItem' },
+  name: { type: String },
+  unit: { type: String },
+  quantity: { type: Number, required: true },
+  points: { type: Number, default: 0 }, // per unit
 }, { _id: false })
 
 const BeneficiarySchema = new mongoose.Schema({
@@ -31,6 +43,8 @@ const BeneficiarySchema = new mongoose.Schema({
   deliveredAt: { type: Date },
   completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   notes: { type: String },
+  takenItems: [TakenItemSchema], // الأصناف التي استلمها المستفيد
+  pointsUsed: { type: Number, default: 0 }, // نقاط خُصمت من الحالة
 })
 
 const DeliverySchema = new mongoose.Schema({
@@ -71,7 +85,7 @@ DeliverySchema.pre('save', async function (next) {
 
 // In dev, hot reload keeps the previously compiled model in memory. If that cached model
 // was built from an older schema (no beneficiaries[]), drop it so the new schema is used.
-if (mongoose.models.Delivery && (!mongoose.models.Delivery.schema.path('beneficiaries.smsState') || !mongoose.models.Delivery.schema.path('deliveryPoints'))) {
+if (mongoose.models.Delivery && (!mongoose.models.Delivery.schema.path('beneficiaries.smsState') || !mongoose.models.Delivery.schema.path('beneficiaries.pointsUsed'))) {
   mongoose.deleteModel('Delivery')
 }
 

@@ -2,7 +2,8 @@
 import { useState, useEffect, Fragment } from 'react'
 import { useParams } from 'next/navigation'
 import { whatsappLink, smsLink, isValidEgyptMobile } from '../../../../../lib/phone'
-import { FOOD_ITEMS, OTHER_ITEM, itemsToText, itemPoints, itemsTotalPoints, casesPoints } from '../../../../../lib/foodItems'
+import Link from 'next/link'
+import { itemsToText, itemPoints, itemsTotalPoints, casesPoints } from '../../../../../lib/foodItems'
 
 const statusMap = {
   scheduled: { label: 'مفتوح', cls: 'badge-pending' },
@@ -44,92 +45,114 @@ function deliveryItemsTotal(d) {
   return d.totalPoints || itemsTotalPoints(d.items)
 }
 
-// ---------- الأصناف picker ----------
-function ItemsPicker({ items, setItems, budget = 0 }) {
-  const [other, setOther] = useState('')
-  const [showOther, setShowOther] = useState(false)
-  const chosen = new Set(items.map(i => i.name))
+// ---------- الأصناف picker: rows come from this user's المخزن ----------
+// picks: stockItemId -> { quantity, points }  (an item is in the delivery when quantity > 0)
+function fmt(n) {
+  return Number(n || 0).toLocaleString('ar-EG', { maximumFractionDigits: 3 })
+}
 
-  function add(name) {
-    if (!name || chosen.has(name)) return
-    setItems([...items, { name, quantity: '', points: '' }])
+function buildItems(stock, picks) {
+  return stock
+    .filter(s => Number(picks[s._id]?.quantity) > 0)
+    .map(s => ({
+      stockItemId: s._id,
+      name: s.name,
+      unit: s.unit,
+      quantity: picks[s._id].quantity,
+      points: picks[s._id].points === '' || picks[s._id].points == null ? s.points : picks[s._id].points,
+      available: s.available,
+    }))
+}
+
+function ItemsPicker({ stock, picks, setPicks, budget = 0, stockHref }) {
+  const [search, setSearch] = useState('')
+  const [onlyAvailable, setOnlyAvailable] = useState(true)
+  const items = buildItems(stock, picks)
+  const total = itemsTotalPoints(items)
+  const shown = stock.filter(s =>
+    (!search || s.name.includes(search)) && (!onlyAvailable || s.available > 0 || Number(picks[s._id]?.quantity) > 0))
+
+  function setPick(id, patch) {
+    setPicks({ ...picks, [id]: { ...(picks[id] || { quantity: '', points: '' }), ...patch } })
+  }
+
+  if (!stock.length) {
+    return (
+      <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        مخزن هذا المستخدم فارغ — أضف الأصناف وكمياتها من <Link href={stockHref} className="underline font-medium">المخزن</Link> أولًا.
+      </p>
+    )
   }
 
   return (
     <div>
-      <div className="flex gap-2 flex-wrap items-center">
-        <select
-          value=""
-          onChange={e => {
-            const v = e.target.value
-            if (v === OTHER_ITEM) setShowOther(true)
-            else add(v)
-          }}
-          className="input-field w-64"
-        >
-          <option value="">+ اختر صنفًا لإضافته</option>
-          {FOOD_ITEMS.filter(n => !chosen.has(n)).map(n => <option key={n} value={n}>{n}</option>)}
-          <option value={OTHER_ITEM}>{OTHER_ITEM} (إدخال يدوي)</option>
-        </select>
-        {showOther && (
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={other}
-              onChange={e => setOther(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(other.trim()); setOther(''); setShowOther(false) } }}
-              placeholder="اكتب اسم الصنف"
-              className="input-field w-48"
-              autoFocus
-            />
-            <button type="button" className="btn-secondary text-sm" onClick={() => { add(other.trim()); setOther(''); setShowOther(false) }}>إضافة</button>
-          </div>
-        )}
+      <div className="flex gap-3 items-center mb-2 flex-wrap">
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث عن صنف..." className="input-field flex-1 min-w-48" />
+        <label className="flex items-center gap-1.5 text-sm text-gray-600">
+          <input type="checkbox" checked={onlyAvailable} onChange={e => setOnlyAvailable(e.target.checked)} />
+          المتوفر فقط
+        </label>
+        <Link href={stockHref} className="text-sm text-primary-700 hover:underline">تعديل المخزن ←</Link>
       </div>
-      {items.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {items.map((it, idx) => (
-            <div key={it.name} className="flex items-center gap-2 bg-primary-50 border border-primary-200 rounded-lg px-2 py-1">
-              <span className="text-sm font-medium text-primary-900">{it.name}</span>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                value={it.quantity}
-                onChange={e => setItems(items.map((x, i) => (i === idx ? { ...x, quantity: e.target.value } : x)))}
-                placeholder="الكمية"
-                className="w-20 text-xs border border-gray-300 rounded px-1.5 py-1"
-              />
-              <input
-                type="number"
-                min="0"
-                value={it.points ?? ''}
-                onChange={e => setItems(items.map((x, i) => (i === idx ? { ...x, points: e.target.value } : x)))}
-                placeholder="عدد النقاط"
-                className="w-24 text-xs border border-gray-300 rounded px-1.5 py-1"
-              />
-              <span className="text-xs text-gray-600 whitespace-nowrap">= <b className="text-primary-800">{itemPoints(it)}</b></span>
-              <button type="button" onClick={() => setItems(items.filter((_, i) => i !== idx))} className="text-gray-400 hover:text-red-600 text-lg leading-none">×</button>
-            </div>
-          ))}
-        </div>
+      <div className="border rounded-lg max-h-80 overflow-y-auto">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-gray-50">
+            <tr className="border-b text-gray-600">
+              <th className="text-right px-3 py-2">الصنف</th>
+              <th className="text-center px-2 py-2">المتاح بالمخزن</th>
+              <th className="text-center px-2 py-2">الكمية في التسليم</th>
+              <th className="text-center px-2 py-2">النقاط لكل وحدة</th>
+              <th className="text-center px-2 py-2">النقاط</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.length === 0 ? (
+              <tr><td colSpan={5} className="text-center text-gray-400 py-6">لا توجد أصناف متوفرة</td></tr>
+            ) : shown.map(s => {
+              const p = picks[s._id] || { quantity: '', points: '' }
+              const q = Number(p.quantity) || 0
+              const pts = p.points === '' || p.points == null ? s.points : p.points
+              const over = q > s.available
+              return (
+                <tr key={s._id} className={`border-b last:border-0 ${q > 0 ? 'bg-primary-50' : ''}`}>
+                  <td className="px-3 py-1.5 font-medium text-gray-800">{s.name} <span className="text-xs text-gray-500">({s.unit || '—'})</span></td>
+                  <td className="px-2 py-1.5 text-center text-gray-700">
+                    {fmt(s.available)}
+                    {s.reserved > 0 && <div className="text-[11px] text-amber-600">محجوز {fmt(s.reserved)}</div>}
+                  </td>
+                  <td className="px-2 py-1.5 text-center">
+                    <input
+                      type="number" min="0" step="any" value={p.quantity}
+                      onChange={e => setPick(s._id, { quantity: e.target.value })}
+                      placeholder="0"
+                      className={`w-24 text-sm border rounded px-1.5 py-1 ${over ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
+                    />
+                    {over && <div className="text-[11px] text-red-600">أكبر من المتاح</div>}
+                  </td>
+                  <td className="px-2 py-1.5 text-center">
+                    <input
+                      type="number" min="0" step="any" value={p.points === '' ? '' : p.points}
+                      onChange={e => setPick(s._id, { points: e.target.value })}
+                      placeholder={String(s.points ?? 0)}
+                      className="w-20 text-sm border border-gray-300 rounded px-1.5 py-1"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-center font-semibold text-primary-800">{q > 0 ? fmt(q * (Number(pts) || 0)) : '—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-sm text-gray-700">
+        الأصناف المختارة: <b>{items.length}</b> — إجمالي نقاط التسليم (الكمية × النقاط): <b className="text-primary-800">{fmt(total)}</b>
+        <span className="text-gray-500"> من {fmt(budget)}</span>
+      </p>
+      {total > budget && (
+        <p className="mt-1 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">
+          ⚠ إجمالي نقاط التسليم ({fmt(total)}) أكبر من عدد نقاط التسليم ({fmt(budget)}) بفارق {fmt(total - budget)}
+        </p>
       )}
-      {items.length > 0 && (() => {
-        const total = itemsTotalPoints(items)
-        return (
-          <>
-            <p className="mt-2 text-sm text-gray-700">
-              إجمالي نقاط التسليم (الكمية × عدد النقاط): <b className="text-primary-800">{total}</b>
-              <span className="text-gray-500"> من {budget}</span>
-            </p>
-            {total > budget && (
-              <p className="mt-1 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">
-                ⚠ إجمالي نقاط التسليم ({total}) أكبر من عدد نقاط التسليم ({budget}) بفارق {total - budget}
-              </p>
-            )}
-          </>
-        )
-      })()}
     </div>
   )
 }
@@ -260,6 +283,11 @@ function BeneficiariesTable({ delivery, onSend, sendingKey, lastSms }) {
                 {pending
                   ? <span className="badge badge-pending">لم يستلم</span>
                   : <span className="badge badge-active">استلم {b.deliveredAt ? new Date(b.deliveredAt).toLocaleDateString('ar-EG') : ''}</span>}
+                {!pending && b.takenItems?.length > 0 && (
+                  <div className="text-[11px] text-gray-600 mt-1 max-w-56 mx-auto">
+                    {itemsToText(b.takenItems)} — <b>{fmt(b.pointsUsed)}</b> نقطة
+                  </div>
+                )}
               </td>
               <td className="px-2 py-2 text-center whitespace-nowrap">
                 {pending && delivery.status === 'scheduled' && (
@@ -286,7 +314,8 @@ export default function AdminUserDeliveriesPage() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm)
-  const [items, setItems] = useState([])
+  const [stock, setStock] = useState([])
+  const [picks, setPicks] = useState({}) // stockItemId -> { quantity, points }
   const [selected, setSelected] = useState({}) // caseId -> phone
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -302,8 +331,10 @@ export default function AdminUserDeliveriesPage() {
       fetch(`/api/deliveries?userId=${userId}`).then(r => r.json()),
       fetch(`/api/cases?userId=${userId}`).then(r => r.json()),
       fetch('/api/admin/sms-status').then(r => (r.ok ? r.json() : null)).catch(() => null),
-    ]).then(([dels, cas, cfg]) => {
+      fetch(`/api/stock?userId=${userId}`).then(r => r.json()).catch(() => []),
+    ]).then(([dels, cas, cfg, stk]) => {
       setSmsCfg(cfg)
+      setStock(Array.isArray(stk) ? stk : [])
       setDeliveries(Array.isArray(dels) ? dels : [])
       setCases(Array.isArray(cas) ? cas : [])
       setLoading(false)
@@ -326,17 +357,25 @@ export default function AdminUserDeliveriesPage() {
     )
   }
 
+  function reloadStock() {
+    fetch(`/api/stock?userId=${userId}`).then(r => r.json()).then(d => setStock(Array.isArray(d) ? d : [])).catch(() => {})
+  }
+
   async function handleCreate(e) {
     e.preventDefault()
     setError('')
     setNotice(null)
     const beneficiaries = Object.entries(selected).map(([caseId, phone]) => ({ caseId, phone }))
     if (!beneficiaries.length) return setError('اختر حالة واحدة على الأقل')
+    const items = buildItems(stock, picks)
+    if (!items.length) return setError('اختر صنفًا واحدًا على الأقل من المخزن وحدد كميته')
+    const over = items.find(i => Number(i.quantity) > i.available)
+    if (over) return setError(`كمية ${over.name} (${over.quantity}) أكبر من المتاح بالمخزن (${over.available})`)
     setSubmitting(true)
     const res = await fetch('/api/deliveries', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, userId, items, beneficiaries }),
+      body: JSON.stringify({ ...form, userId, beneficiaries, items: items.map(i => ({ stockItemId: i.stockItemId, quantity: i.quantity, points: i.points })) }),
     })
     setSubmitting(false)
     const data = await res.json().catch(() => ({}))
@@ -347,8 +386,9 @@ export default function AdminUserDeliveriesPage() {
       if (!data.sms) setNotice({ type: 'ok', text: `تم إنشاء التسليم ${data.delivery.requestNo} بكود ${data.delivery.codePrefix} — لم يتم إرسال رسائل بعد.` })
       setShowForm(false)
       setForm(emptyForm)
-      setItems([])
+      setPicks({})
       setSelected({})
+      reloadStock()
     } else {
       setError(data.error || 'حدث خطأ أثناء الإنشاء')
     }
@@ -379,6 +419,7 @@ export default function AdminUserDeliveriesPage() {
     const data = await res.json().catch(() => ({}))
     if (res.ok) {
       setDeliveries(deliveries.filter(d => d._id !== delivery._id))
+      reloadStock()
       if (expanded === delivery._id) setExpanded(null)
       setNotice({ type: 'ok', text: `تم حذف التسليم ${delivery.requestNo || ''}` })
     } else {
@@ -409,7 +450,7 @@ export default function AdminUserDeliveriesPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">إدارة التسليمات</h1>
-        <button className="btn-primary text-sm" onClick={() => { setShowForm(!showForm); setError('') }}>
+        <button className="btn-primary text-sm" onClick={() => { if (!showForm) reloadStock(); setShowForm(!showForm); setError('') }}>
           {showForm ? 'إلغاء' : '+ تسليم جديد'}
         </button>
       </div>
@@ -467,7 +508,7 @@ export default function AdminUserDeliveriesPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">الأصناف</label>
-              <ItemsPicker items={items} setItems={setItems} budget={selectedPoints} />
+              <ItemsPicker stock={stock} picks={picks} setPicks={setPicks} budget={selectedPoints} stockHref={`/admin/users/${userId}/deliveries/stock`} />
             </div>
 
             <div>

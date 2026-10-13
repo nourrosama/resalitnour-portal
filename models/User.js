@@ -11,6 +11,7 @@ const UserSchema = new mongoose.Schema({
   governorate: { type: String },
   isActive: { type: Boolean, default: true },
   mustChangePassword: { type: Boolean, default: true },
+  stockSeeded: { type: Boolean, default: false }, // المخزن filled with the default الأصناف once
   createdAt: { type: Date, default: Date.now },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 })
@@ -23,6 +24,11 @@ UserSchema.pre('save', async function (next) {
 
 UserSchema.methods.comparePassword = async function (password) {
   return bcrypt.compare(password, this.password)
+}
+
+// dev hot reload: drop a cached model that predates stockSeeded
+if (mongoose.models.User && !mongoose.models.User.schema.path('stockSeeded')) {
+  mongoose.deleteModel('User')
 }
 
 export default mongoose.models.User || mongoose.model('User', UserSchema)

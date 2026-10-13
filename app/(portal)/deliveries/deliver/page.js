@@ -4,6 +4,68 @@ import Link from 'next/link'
 import { Panel } from '../../../../components/portal/DeliveryPanel'
 import { itemsToText } from '../../../../lib/foodItems'
 
+function fmt(n) {
+  return Number(n || 0).toLocaleString('ar-EG', { maximumFractionDigits: 3 })
+}
+
+// Choose which الأصناف this beneficiary takes and how much; points are deducted from the case
+function TakeItems({ items, picks, setPicks, casePoints }) {
+  const used = items.reduce((s, it) => s + (Number(picks[it.index]) || 0) * it.points, 0)
+  const over = used > casePoints
+  return (
+    <div className="mt-6">
+      <h3 className="font-semibold text-gray-800 mb-2">الأصناف التي سيستلمها المستفيد</h3>
+      <div className="border rounded-lg overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr className="border-b text-gray-600">
+              <th className="text-right px-3 py-2">الصنف</th>
+              <th className="text-center px-2 py-2">المتبقي في هذا التسليم</th>
+              <th className="text-center px-2 py-2">النقاط لكل وحدة</th>
+              <th className="text-center px-2 py-2">الكمية للمستفيد</th>
+              <th className="text-center px-2 py-2">النقاط</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map(it => {
+              const q = Number(picks[it.index]) || 0
+              const tooMuch = q > it.remaining
+              return (
+                <tr key={it.index} className={`border-b last:border-0 ${q > 0 ? 'bg-primary-50' : ''} ${it.remaining <= 0 ? 'opacity-50' : ''}`}>
+                  <td className="px-3 py-1.5 font-medium text-gray-800">{it.name} <span className="text-xs text-gray-500">({it.unit || '—'})</span></td>
+                  <td className="px-2 py-1.5 text-center">{fmt(it.remaining)}</td>
+                  <td className="px-2 py-1.5 text-center">{fmt(it.points)}</td>
+                  <td className="px-2 py-1.5 text-center">
+                    <div className="inline-flex items-center gap-1">
+                      <input
+                        type="number" min="0" step="any" max={it.remaining}
+                        disabled={it.remaining <= 0}
+                        value={picks[it.index] ?? ''}
+                        onChange={e => setPicks({ ...picks, [it.index]: e.target.value })}
+                        placeholder="0"
+                        className={`w-24 text-sm border rounded px-1.5 py-1 ${tooMuch ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
+                      />
+                      {it.remaining > 0 && (
+                        <button type="button" onClick={() => setPicks({ ...picks, [it.index]: String(it.remaining) })} className="text-[11px] text-primary-700 hover:underline">الكل</button>
+                      )}
+                    </div>
+                    {tooMuch && <div className="text-[11px] text-red-600">أكبر من المتبقي</div>}
+                  </td>
+                  <td className="px-2 py-1.5 text-center font-semibold text-primary-800">{q > 0 ? fmt(q * it.points) : '—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className={`mt-3 p-3 rounded-lg border text-sm ${over ? 'bg-red-50 border-red-200 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
+        نقاط الحالة: <b>{fmt(casePoints)}</b> — نقاط الأصناف المختارة: <b>{fmt(used)}</b> — المتبقي للحالة بعد التسليم: <b>{fmt(casePoints - used)}</b>
+        {over && <div className="mt-1 font-medium">⚠ نقاط الأصناف المختارة أكبر من نقاط الحالة — قلّل الكميات</div>}
+      </div>
+    </div>
+  )
+}
+
 function Row({ label, value }) {
   return (
     <div className="flex justify-between gap-4 py-2 border-b last:border-0">
@@ -21,6 +83,7 @@ export default function DeliverBeneficiaryPage() {
   const [searching, setSearching] = useState(false)
   const [completing, setCompleting] = useState(false)
   const [done, setDone] = useState(null)
+  const [picks, setPicks] = useState({}) // item index -> quantity
 
   async function handleSearch(e) {
     e.preventDefault()
@@ -35,17 +98,28 @@ export default function DeliverBeneficiaryPage() {
     })
     setSearching(false)
     const data = await res.json().catch(() => ({}))
-    if (res.ok) setFound(data)
+    if (res.ok) { setFound(data); setPicks({}) }
     else setError(data.error || 'الكود غير صحيح')
   }
 
   async function handleComplete() {
     setError('')
+    const items = (found.delivery.items || [])
+      .map(it => ({ index: it.index, quantity: Number(picks[it.index]) || 0, it }))
+      .filter(x => x.quantity > 0)
+    const bad = items.find(x => x.quantity > x.it.remaining)
+    if (bad) return setError(`المتبقي من ${bad.it.name} في هذا التسليم ${bad.it.remaining} فقط`)
+    if (found.delivery.items?.some(it => it.remaining > 0) && !items.length) {
+      return setError('اختر الأصناف التي سيستلمها المستفيد وكمياتها')
+    }
+    const used = items.reduce((s, x) => s + x.quantity * x.it.points, 0)
+    const casePts = Number(found.beneficiary.caseId?.points) || 0
+    if (used > casePts) return setError(`نقاط الأصناف المختارة (${used}) أكبر من نقاط الحالة (${casePts})`)
     setCompleting(true)
     const res = await fetch(`/api/deliveries/${found.delivery._id}/complete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, notes }),
+      body: JSON.stringify({ code, notes, items: items.map(({ index, quantity }) => ({ index, quantity })) }),
     })
     setCompleting(false)
     const data = await res.json().catch(() => ({}))
@@ -54,6 +128,7 @@ export default function DeliverBeneficiaryPage() {
       setFound(null)
       setCode('')
       setNotes('')
+      setPicks({})
     } else {
       setError(data.error || 'حدث خطأ')
     }
@@ -87,6 +162,9 @@ export default function DeliverBeneficiaryPage() {
         {done && (
           <div className="mt-4 bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg text-sm">
             ✓ تم تسليم «{done.delivery.deliveryType}» للمستفيد {done.beneficiary.caseId?.name} بنجاح.
+            {done.takenItems?.length > 0 && (
+              <> استلم: {itemsToText(done.takenItems)} — خُصم {fmt(done.pointsUsed)} نقطة (المتبقي للحالة {fmt(done.casePointsLeft)}).</>
+            )}
             {done.closed ? (
               <> اكتمل التسليم لكل المستفيدين وتم نقل الطلب إلى{' '}
                 <Link href="/deliveries/closed" className="underline font-medium">طلبات التسليم المغلقة</Link>.</>
@@ -109,14 +187,17 @@ export default function DeliverBeneficiaryPage() {
               <Row label="اسم الطلب" value={d.deliveryType} />
             </div>
             <div>
-              <Row label="الأصناف" value={itemsToText(d.items)} />
-              <Row label="المبلغ" value={d.amount ? `${d.amount} ج.م` : ''} />
+              <Row label="نقاط الحالة المتاحة" value={fmt(b.caseId?.points)} />
+              {d.amount ? <Row label="المبلغ" value={`${d.amount} ج.م`} /> : null}
               <Row label="مكان التسليم" value={d.location} />
               <Row label="تاريخ التسليم" value={d.scheduledFor ? new Date(d.scheduledFor).toLocaleDateString('ar-EG') : ''} />
               <Row label="تم التسليم في هذا الطلب" value={`${d.delivered} من ${d.total}`} />
             </div>
           </div>
           {d.notes && <p className="text-sm text-gray-600 mt-3">ملاحظات الإدارة: {d.notes}</p>}
+          {d.items?.length > 0 && (
+            <TakeItems items={d.items} picks={picks} setPicks={setPicks} casePoints={Number(b.caseId?.points) || 0} />
+          )}
           <div className="mt-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">ملاحظات التسليم (اختياري)</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} className="input-field" rows={2} />

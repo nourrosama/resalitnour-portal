@@ -54,7 +54,7 @@ export default function AdminUsersPage() {
   }
 
   async function handleDelete(u) {
-    if (!confirm(`حذف المستخدم "${u.name}" نهائيًا؟\nسيتم حذف كل حالاته وتسليماته وطلباته ورسائله وملف المنظمة. لا يمكن التراجع.`)) return
+    if (!confirm(`حذف المستخدم "${u.name}" نهائيًا؟\nسيتم حذف كل حالاته وتسليماته وطلباته ورسائله ومخزنه وملف المنظمة. لا يمكن التراجع.`)) return
     setError('')
     setSuccess('')
     const res = await fetch(`/api/admin/users/${u._id}`, { method: 'DELETE' })

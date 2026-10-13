@@ -9,6 +9,8 @@ import {
   generateDeliveryPrefix, generateCaseCode, sendBeneficiaryCode, migrateLegacyDeliveries, sanitizeForUser,
 } from '../../../lib/deliveryCode'
 import { itemsTotalPoints, casesPoints } from '../../../lib/foodItems'
+import StockItem from '../../../models/StockItem'
+import { reservedByItem, round } from '../../../lib/stock'
 
 // Sending waits for the gateway phone to confirm (~12s); allow longer than the default on hosts like Vercel
 export const maxDuration = 30
@@ -51,7 +53,7 @@ export async function GET(req) {
 }
 
 // POST /api/deliveries (admin)
-// { userId, beneficiaries: [{ caseId, phone }], deliveryType, items: [{ name, quantity, points }],
+// { userId, beneficiaries: [{ caseId, phone }], deliveryType, items: [{ stockItemId, quantity, points? }],
 //   location, scheduledFor, notes, sendSms }
 export async function POST(req) {
   const session = await getServerSession(authOptions)
@@ -74,14 +76,31 @@ export async function POST(req) {
   }
   const caseById = Object.fromEntries(cases.map(c => [String(c._id), c]))
 
-  const cleanItems = items.filter(i => i?.name?.trim()).map(i => {
-    const pts = Number(i.points)
-    return {
-      name: i.name.trim(),
-      quantity: String(i.quantity ?? '').trim() || undefined,
-      points: i.points === '' || i.points == null || !Number.isFinite(pts) || pts < 0 ? undefined : pts,
+  // الأصناف come from this user's المخزن; each quantity must fit in what is still available
+  // (stock minus what other open deliveries have reserved)
+  const wantedItems = items.filter(i => i?.stockItemId && Number(i.quantity) > 0)
+  if (!wantedItems.length) return NextResponse.json({ error: 'اختر صنفًا واحدًا على الأقل من المخزن' }, { status: 400 })
+  const stockRows = await StockItem.find({ _id: { $in: wantedItems.map(i => i.stockItemId) }, userId })
+  const stockById = Object.fromEntries(stockRows.map(r => [String(r._id), r]))
+  const reserved = await reservedByItem(userId)
+  const cleanItems = []
+  for (const i of wantedItems) {
+    const row = stockById[String(i.stockItemId)]
+    if (!row) return NextResponse.json({ error: 'بعض الأصناف غير موجودة في مخزن هذا المستخدم' }, { status: 400 })
+    const qty = round(Number(i.quantity))
+    const available = round((row.quantity || 0) - (reserved[String(row._id)] || 0))
+    if (qty > available) {
+      return NextResponse.json({ error: `كمية ${row.name} (${qty}) أكبر من المتاح بالمخزن (${Math.max(0, available)})` }, { status: 400 })
     }
-  })
+    const pts = i.points === '' || i.points == null ? row.points : Number(i.points)
+    cleanItems.push({
+      stockItemId: row._id,
+      name: row.name,
+      unit: row.unit,
+      quantity: String(qty),
+      points: Number.isFinite(pts) && pts >= 0 ? pts : (row.points || 0),
+    })
+  }
   const totalPoints = itemsTotalPoints(cleanItems) // Σ الكمية × عدد النقاط
   const deliveryPoints = casesPoints(cases)       // Σ نقاط الحالات المستفيدة
 
