@@ -6,7 +6,7 @@ import Delivery from '../../../../../models/Delivery'
 import Case from '../../../../../models/Case'
 import StockItem from '../../../../../models/StockItem'
 import { normalizeCode, closeIfComplete } from '../../../../../lib/deliveryCode'
-import { remainingPerItem, round, itemLimitsFor } from '../../../../../lib/stock'
+import { remainingPerItem, round, resolveDeliveryItems } from '../../../../../lib/stock'
 
 // POST /api/deliveries/[id]/complete  { code, notes?, items: [{ index, quantity }] }
 // The user hands this beneficiary the chosen الأصناف:
@@ -35,7 +35,8 @@ export async function POST(req, { params }) {
   // ---- the case: points + family size (for the limits in جدول الأصناف)
   const caseDoc = await Case.findById(b.caseId).select('points name familyMembers')
   if (!caseDoc) return NextResponse.json({ error: 'الحالة غير موجودة' }, { status: 404 })
-  const limits = await itemLimitsFor(delivery, caseDoc.familyMembers)
+  const rules = await resolveDeliveryItems(delivery, caseDoc.familyMembers)
+  const limits = rules.map(r => r.limit)
 
   // ---- validate the chosen items
   const remaining = remainingPerItem(delivery)
@@ -48,7 +49,7 @@ export async function POST(req, { params }) {
     const it = delivery.items[idx]
     if (!it || seen.has(idx)) return NextResponse.json({ error: 'صنف غير صالح' }, { status: 400 })
     seen.add(idx)
-    if (it.catalogItemId && limits[idx] === null) {
+    if (rules[idx].linked && limits[idx] === null) {
       return NextResponse.json({ error: 'حدد عدد أفراد الأسرة لهذه الحالة أولًا (من صفحة الحالات)' }, { status: 400 })
     }
     if (limits[idx] !== null && qty > limits[idx]) {
@@ -57,11 +58,11 @@ export async function POST(req, { params }) {
     if (qty > remaining[idx]) {
       return NextResponse.json({ error: `المتبقي من ${it.name} في هذا التسليم ${Math.max(0, remaining[idx])} فقط` }, { status: 400 })
     }
-    taken.push({ itemIndex: idx, stockItemId: it.stockItemId, name: it.name, unit: it.unit, quantity: qty, points: Number(it.points) || 0 })
+    taken.push({ itemIndex: idx, stockItemId: it.stockItemId, name: it.name, unit: rules[idx].unit, quantity: qty, points: rules[idx].points })
   }
   // something this case could still take (left in the delivery, allowed for its family size, affordable)
   const canTakeSomething = delivery.items.some((it, idx) =>
-    remaining[idx] > 0 && limits[idx] !== 0 && (Number(it.points) || 0) <= (caseDoc.points || 0))
+    remaining[idx] > 0 && limits[idx] !== 0 && rules[idx].points <= (caseDoc.points || 0))
   if (canTakeSomething && !taken.length) {
     return NextResponse.json({ error: 'اختر الأصناف التي سيستلمها المستفيد وكمياتها' }, { status: 400 })
   }
