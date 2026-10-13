@@ -4,5 +4,5 @@ import StockPanel from '../../../../../../components/shared/StockPanel'
 
 export default function AdminUserStockPage() {
   const { id } = useParams()
-  return <StockPanel userId={id} />
+  return <StockPanel userId={id} isAdmin />
 }

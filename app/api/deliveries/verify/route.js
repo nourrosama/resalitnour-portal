@@ -5,7 +5,7 @@ import connectDB from '../../../../lib/mongodb'
 import Delivery from '../../../../models/Delivery'
 import '../../../../models/Case'
 import { normalizeCode, migrateLegacyDeliveries } from '../../../../lib/deliveryCode'
-import { remainingPerItem, numQty } from '../../../../lib/stock'
+import { remainingPerItem, numQty, itemLimitsFor } from '../../../../lib/stock'
 
 // POST /api/deliveries/verify  { code } — the user looks up a beneficiary by their voucher code
 export async function POST(req) {
@@ -33,6 +33,8 @@ export async function POST(req) {
 
   const o = delivery.toObject()
   const remaining = remainingPerItem(o)
+  const familyMembers = b.caseId?.familyMembers
+  const limits = await itemLimitsFor(o, familyMembers)
   const { code: _c, phone, smsError, smsStatus, smsSentAt, smsGatewayId, smsState, ...beneficiary } = b.toObject()
   return NextResponse.json({
     delivery: {
@@ -41,7 +43,11 @@ export async function POST(req) {
       items: (o.items || []).map((it, idx) => ({
         index: idx, name: it.name, unit: it.unit, points: Number(it.points) || 0,
         quantity: numQty(it.quantity), remaining: Math.max(0, remaining[idx]),
+        limit: limits[idx], // الحد الأقصى for this case's family size (null = no rule)
+        max: limits[idx] === null ? Math.max(0, remaining[idx]) : Math.max(0, Math.min(limits[idx], remaining[idx])),
       })),
+      familyMembers: familyMembers ?? null,
+      needsFamilySize: limits.some((l, i) => l === null && o.items[i]?.catalogItemId),
       location: o.location, scheduledFor: o.scheduledFor, notes: o.notes,
       total: o.beneficiaries.length,
       delivered: o.beneficiaries.filter(x => x.status === 'delivered').length,

@@ -10,6 +10,7 @@ import {
 } from '../../../lib/deliveryCode'
 import { itemsTotalPoints, casesPoints } from '../../../lib/foodItems'
 import StockItem from '../../../models/StockItem'
+import CatalogItem from '../../../models/CatalogItem'
 import { reservedByItem, round } from '../../../lib/stock'
 
 // Sending waits for the gateway phone to confirm (~12s); allow longer than the default on hosts like Vercel
@@ -53,7 +54,7 @@ export async function GET(req) {
 }
 
 // POST /api/deliveries (admin)
-// { userId, beneficiaries: [{ caseId, phone }], deliveryType, items: [{ stockItemId, quantity, points? }],
+// { userId, beneficiaries: [{ caseId, phone }], deliveryType, items: [{ stockItemId, quantity }]  (points from جدول الأصناف),
 //   location, scheduledFor, notes, sendSms }
 export async function POST(req) {
   const session = await getServerSession(authOptions)
@@ -82,23 +83,29 @@ export async function POST(req) {
   if (!wantedItems.length) return NextResponse.json({ error: 'اختر صنفًا واحدًا على الأقل من المخزن' }, { status: 400 })
   const stockRows = await StockItem.find({ _id: { $in: wantedItems.map(i => i.stockItemId) }, userId })
   const stockById = Object.fromEntries(stockRows.map(r => [String(r._id), r]))
+  const catalogRows = await CatalogItem.find({ _id: { $in: stockRows.map(r => r.catalogItemId).filter(Boolean) } }).lean()
+  const catById = Object.fromEntries(catalogRows.map(c => [String(c._id), c]))
   const reserved = await reservedByItem(userId)
   const cleanItems = []
   for (const i of wantedItems) {
     const row = stockById[String(i.stockItemId)]
     if (!row) return NextResponse.json({ error: 'بعض الأصناف غير موجودة في مخزن هذا المستخدم' }, { status: 400 })
+    const cat = row.catalogItemId ? catById[String(row.catalogItemId)] : null
+    if (!cat) return NextResponse.json({ error: `الصنف ${row.name} غير موجود في جدول الأصناف` }, { status: 400 })
     const qty = round(Number(i.quantity))
     const available = round((row.quantity || 0) - (reserved[String(row._id)] || 0))
     if (qty > available) {
-      return NextResponse.json({ error: `كمية ${row.name} (${qty}) أكبر من المتاح بالمخزن (${Math.max(0, available)})` }, { status: 400 })
+      return NextResponse.json({ error: `كمية ${cat.name} (${qty}) أكبر من المتاح بالمخزن (${Math.max(0, available)})` }, { status: 400 })
     }
-    const pts = i.points === '' || i.points == null ? row.points : Number(i.points)
+    // name / unit / weight / points come from the global جدول الأصناف
     cleanItems.push({
       stockItemId: row._id,
-      name: row.name,
-      unit: row.unit,
+      catalogItemId: cat._id,
+      name: cat.name,
+      unit: cat.unit,
+      weight: cat.weight,
       quantity: String(qty),
-      points: Number.isFinite(pts) && pts >= 0 ? pts : (row.points || 0),
+      points: cat.points || 0,
     })
   }
   const totalPoints = itemsTotalPoints(cleanItems) // Σ الكمية × عدد النقاط

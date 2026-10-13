@@ -8,19 +8,36 @@ function fmt(n) {
   return Number(n || 0).toLocaleString('ar-EG', { maximumFractionDigits: 3 })
 }
 
-// Choose which الأصناف this beneficiary takes and how much; points are deducted from the case
-function TakeItems({ items, picks, setPicks, casePoints }) {
-  const used = items.reduce((s, it) => s + (Number(picks[it.index]) || 0) * it.points, 0)
+// Choose which الأصناف this beneficiary takes and how much; points are deducted from the case.
+// Each item's maximum = the smallest of: الحد الأقصى for the family size (جدول الأصناف),
+// what's left of it in this delivery, and what the case's remaining points can still pay for.
+function TakeItems({ items, picks, setPicks, casePoints, familyMembers }) {
+  const qtyOf = it => Number(picks[it.index]) || 0
+  const used = items.reduce((s, it) => s + qtyOf(it) * it.points, 0)
   const over = used > casePoints
+
+  // the max for one item given what's already chosen for the others
+  function maxFor(it) {
+    const otherPts = used - qtyOf(it) * it.points
+    const byPoints = it.points > 0 ? Math.floor(Math.max(0, casePoints - otherPts) / it.points) : Infinity
+    return Math.max(0, Math.min(it.max, byPoints))
+  }
+
   return (
     <div className="mt-6">
-      <h3 className="font-semibold text-gray-800 mb-2">الأصناف التي سيستلمها المستفيد</h3>
+      <h3 className="font-semibold text-gray-800 mb-1">الأصناف التي سيستلمها المستفيد</h3>
+      <p className="text-xs text-gray-500 mb-2">
+        {familyMembers
+          ? <>الحد الأقصى محسوب لأسرة من <b>{familyMembers}</b> {familyMembers >= 7 ? 'أفراد أو أكثر' : 'أفراد'} حسب جدول الأصناف.</>
+          : <span className="text-red-600">لم يُحدد عدد أفراد الأسرة لهذه الحالة — عدّل الحالة من صفحة الحالات أولًا.</span>}
+      </p>
       <div className="border rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr className="border-b text-gray-600">
               <th className="text-right px-3 py-2">الصنف</th>
               <th className="text-center px-2 py-2">المتبقي في هذا التسليم</th>
+              <th className="text-center px-2 py-2">الحد الأقصى للأسرة</th>
               <th className="text-center px-2 py-2">النقاط لكل وحدة</th>
               <th className="text-center px-2 py-2">الكمية للمستفيد</th>
               <th className="text-center px-2 py-2">النقاط</th>
@@ -28,28 +45,37 @@ function TakeItems({ items, picks, setPicks, casePoints }) {
           </thead>
           <tbody>
             {items.map(it => {
-              const q = Number(picks[it.index]) || 0
-              const tooMuch = q > it.remaining
+              const q = qtyOf(it)
+              const max = maxFor(it)
+              const locked = it.max <= 0
+              const tooMuch = q > it.max
               return (
-                <tr key={it.index} className={`border-b last:border-0 ${q > 0 ? 'bg-primary-50' : ''} ${it.remaining <= 0 ? 'opacity-50' : ''}`}>
+                <tr key={it.index} className={`border-b last:border-0 ${q > 0 ? 'bg-primary-50' : ''} ${locked ? 'opacity-50' : ''}`}>
                   <td className="px-3 py-1.5 font-medium text-gray-800">{it.name} <span className="text-xs text-gray-500">({it.unit || '—'})</span></td>
                   <td className="px-2 py-1.5 text-center">{fmt(it.remaining)}</td>
+                  <td className={`px-2 py-1.5 text-center font-semibold ${it.limit === 0 ? 'text-red-500' : 'text-gray-800'}`}>
+                    {it.limit === null ? '—' : fmt(it.limit)}
+                  </td>
                   <td className="px-2 py-1.5 text-center">{fmt(it.points)}</td>
                   <td className="px-2 py-1.5 text-center">
                     <div className="inline-flex items-center gap-1">
                       <input
-                        type="number" min="0" step="any" max={it.remaining}
-                        disabled={it.remaining <= 0}
+                        type="number" min="0" step="1" max={it.max}
+                        disabled={locked}
                         value={picks[it.index] ?? ''}
-                        onChange={e => setPicks({ ...picks, [it.index]: e.target.value })}
+                        onChange={e => {
+                          let v = e.target.value
+                          if (v !== '' && Number(v) > it.max) v = String(it.max) // can't go above the limit
+                          setPicks({ ...picks, [it.index]: v })
+                        }}
                         placeholder="0"
-                        className={`w-24 text-sm border rounded px-1.5 py-1 ${tooMuch ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
+                        className={`w-20 text-sm border rounded px-1.5 py-1 ${tooMuch ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
                       />
-                      {it.remaining > 0 && (
-                        <button type="button" onClick={() => setPicks({ ...picks, [it.index]: String(it.remaining) })} className="text-[11px] text-primary-700 hover:underline">الكل</button>
+                      {!locked && max > 0 && (
+                        <button type="button" onClick={() => setPicks({ ...picks, [it.index]: String(max) })} className="text-[11px] text-primary-700 hover:underline whitespace-nowrap">الحد الأقصى</button>
                       )}
                     </div>
-                    {tooMuch && <div className="text-[11px] text-red-600">أكبر من المتبقي</div>}
+                    {locked && <div className="text-[11px] text-gray-500">{it.limit === 0 ? 'غير مسموح لهذه الأسرة' : 'نفد من التسليم'}</div>}
                   </td>
                   <td className="px-2 py-1.5 text-center font-semibold text-primary-800">{q > 0 ? fmt(q * it.points) : '—'}</td>
                 </tr>
@@ -107,9 +133,15 @@ export default function DeliverBeneficiaryPage() {
     const items = (found.delivery.items || [])
       .map(it => ({ index: it.index, quantity: Number(picks[it.index]) || 0, it }))
       .filter(x => x.quantity > 0)
-    const bad = items.find(x => x.quantity > x.it.remaining)
-    if (bad) return setError(`المتبقي من ${bad.it.name} في هذا التسليم ${bad.it.remaining} فقط`)
-    if (found.delivery.items?.some(it => it.remaining > 0) && !items.length) {
+    const bad = items.find(x => x.quantity > x.it.max)
+    if (bad) {
+      return setError(bad.quantity > bad.it.remaining
+        ? `المتبقي من ${bad.it.name} في هذا التسليم ${bad.it.remaining} فقط`
+        : `الحد الأقصى من ${bad.it.name} لهذه الأسرة هو ${bad.it.limit}`)
+    }
+    if (found.delivery.needsFamilySize) return setError('حدد عدد أفراد الأسرة لهذه الحالة أولًا (من صفحة الحالات)')
+    const casePtsNow = Number(found.beneficiary.caseId?.points) || 0
+    if (found.delivery.items?.some(it => it.max > 0 && it.points <= casePtsNow) && !items.length) {
       return setError('اختر الأصناف التي سيستلمها المستفيد وكمياتها')
     }
     const used = items.reduce((s, x) => s + x.quantity * x.it.points, 0)
@@ -188,6 +220,7 @@ export default function DeliverBeneficiaryPage() {
             </div>
             <div>
               <Row label="نقاط الحالة المتاحة" value={fmt(b.caseId?.points)} />
+              <Row label="عدد أفراد الأسرة" value={b.caseId?.familyMembers ? String(b.caseId.familyMembers) : 'غير محدد'} />
               {d.amount ? <Row label="المبلغ" value={`${d.amount} ج.م`} /> : null}
               <Row label="مكان التسليم" value={d.location} />
               <Row label="تاريخ التسليم" value={d.scheduledFor ? new Date(d.scheduledFor).toLocaleDateString('ar-EG') : ''} />
@@ -196,7 +229,7 @@ export default function DeliverBeneficiaryPage() {
           </div>
           {d.notes && <p className="text-sm text-gray-600 mt-3">ملاحظات الإدارة: {d.notes}</p>}
           {d.items?.length > 0 && (
-            <TakeItems items={d.items} picks={picks} setPicks={setPicks} casePoints={Number(b.caseId?.points) || 0} />
+            <TakeItems items={d.items} picks={picks} setPicks={setPicks} casePoints={Number(b.caseId?.points) || 0} familyMembers={b.caseId?.familyMembers} />
           )}
           <div className="mt-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">ملاحظات التسليم (اختياري)</label>

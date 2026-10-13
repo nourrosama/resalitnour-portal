@@ -18,6 +18,8 @@ const ItemSchema = new mongoose.Schema({
   points: { type: Number, min: 0 }, // عدد النقاط للوحدة — نقاط الصنف = الكمية × عدد النقاط
   unit: { type: String },
   stockItemId: { type: mongoose.Schema.Types.ObjectId, ref: 'StockItem' }, // the المخزن row it came from
+  catalogItemId: { type: mongoose.Schema.Types.ObjectId, ref: 'CatalogItem' }, // جدول الأصناف row (limits per family size)
+  weight: { type: String },
 }, { _id: false })
 
 // What one beneficiary actually took at "تسليم المستفيد"
@@ -85,7 +87,7 @@ DeliverySchema.pre('save', async function (next) {
 
 // In dev, hot reload keeps the previously compiled model in memory. If that cached model
 // was built from an older schema (no beneficiaries[]), drop it so the new schema is used.
-if (mongoose.models.Delivery && (!mongoose.models.Delivery.schema.path('beneficiaries.smsState') || !mongoose.models.Delivery.schema.path('beneficiaries.pointsUsed'))) {
+if (mongoose.models.Delivery && (!mongoose.models.Delivery.schema.path('beneficiaries.smsState') || !mongoose.models.Delivery.schema.path('items.catalogItemId'))) {
   mongoose.deleteModel('Delivery')
 }
 

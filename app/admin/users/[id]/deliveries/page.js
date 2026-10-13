@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation'
 import { whatsappLink, smsLink, isValidEgyptMobile } from '../../../../../lib/phone'
 import Link from 'next/link'
 import { itemsToText, itemPoints, itemsTotalPoints, casesPoints } from '../../../../../lib/foodItems'
+import { limitFor } from '../../../../../lib/catalog'
 
 const statusMap = {
   scheduled: { label: 'مفتوح', cls: 'badge-pending' },
@@ -46,7 +47,9 @@ function deliveryItemsTotal(d) {
 }
 
 // ---------- الأصناف picker: rows come from this user's المخزن ----------
-// picks: stockItemId -> { quantity, points }  (an item is in the delivery when quantity > 0)
+// picks: stockItemId -> { quantity, touched }  (an item is in the delivery when quantity > 0)
+// Untouched rows are auto-filled with the sum of the selected cases' limits (جدول الأصناف),
+// capped by what's available; the admin can change any of them.
 function fmt(n) {
   return Number(n || 0).toLocaleString('ar-EG', { maximumFractionDigits: 3 })
 }
@@ -59,27 +62,33 @@ function buildItems(stock, picks) {
       name: s.name,
       unit: s.unit,
       quantity: picks[s._id].quantity,
-      points: picks[s._id].points === '' || picks[s._id].points == null ? s.points : picks[s._id].points,
+      points: s.points,
       available: s.available,
     }))
 }
 
-function ItemsPicker({ stock, picks, setPicks, budget = 0, stockHref }) {
+// Σ الحد الأقصى of the selected cases for one stock row
+function suggestedFor(s, selectedCases) {
+  return selectedCases.reduce((sum, c) => sum + (limitFor(s.limits, c.familyMembers) || 0), 0)
+}
+
+function ItemsPicker({ stock, picks, setPicks, budget = 0, stockHref, selectedCases, onResuggest }) {
   const [search, setSearch] = useState('')
   const [onlyAvailable, setOnlyAvailable] = useState(true)
   const items = buildItems(stock, picks)
   const total = itemsTotalPoints(items)
   const shown = stock.filter(s =>
     (!search || s.name.includes(search)) && (!onlyAvailable || s.available > 0 || Number(picks[s._id]?.quantity) > 0))
+  const noFamily = selectedCases.filter(c => !(Number(c.familyMembers) >= 1))
 
-  function setPick(id, patch) {
-    setPicks({ ...picks, [id]: { ...(picks[id] || { quantity: '', points: '' }), ...patch } })
+  function setPick(id, quantity) {
+    setPicks({ ...picks, [id]: { quantity, touched: true } })
   }
 
   if (!stock.length) {
     return (
       <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-        مخزن هذا المستخدم فارغ — أضف الأصناف وكمياتها من <Link href={stockHref} className="underline font-medium">المخزن</Link> أولًا.
+        مخزن هذا المستخدم فارغ — أضف الكميات من <Link href={stockHref} className="underline font-medium">المخزن</Link> أولًا.
       </p>
     )
   }
@@ -92,14 +101,24 @@ function ItemsPicker({ stock, picks, setPicks, budget = 0, stockHref }) {
           <input type="checkbox" checked={onlyAvailable} onChange={e => setOnlyAvailable(e.target.checked)} />
           المتوفر فقط
         </label>
+        <button type="button" onClick={onResuggest} className="btn-secondary text-sm">↺ إعادة الاقتراح حسب الحالات</button>
         <Link href={stockHref} className="text-sm text-primary-700 hover:underline">تعديل المخزن ←</Link>
       </div>
-      <div className="border rounded-lg max-h-80 overflow-y-auto">
+      {selectedCases.length === 0 && (
+        <p className="text-xs text-gray-500 mb-2">اختر الحالات المستفيدة أولًا وستُقترح الكميات تلقائيًا حسب عدد أفراد كل أسرة.</p>
+      )}
+      {noFamily.length > 0 && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-2">
+          ⚠ {noFamily.length} من الحالات المختارة بدون عدد أفراد الأسرة ولن تُحسب في الاقتراح: {noFamily.map(c => c.name).join('، ')}
+        </p>
+      )}
+      <div className="border rounded-lg max-h-96 overflow-y-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-gray-50">
             <tr className="border-b text-gray-600">
               <th className="text-right px-3 py-2">الصنف</th>
               <th className="text-center px-2 py-2">المتاح بالمخزن</th>
+              <th className="text-center px-2 py-2">الحد الأقصى للحالات المختارة</th>
               <th className="text-center px-2 py-2">الكمية في التسليم</th>
               <th className="text-center px-2 py-2">النقاط لكل وحدة</th>
               <th className="text-center px-2 py-2">النقاط</th>
@@ -107,11 +126,11 @@ function ItemsPicker({ stock, picks, setPicks, budget = 0, stockHref }) {
           </thead>
           <tbody>
             {shown.length === 0 ? (
-              <tr><td colSpan={5} className="text-center text-gray-400 py-6">لا توجد أصناف متوفرة</td></tr>
+              <tr><td colSpan={6} className="text-center text-gray-400 py-6">لا توجد أصناف متوفرة</td></tr>
             ) : shown.map(s => {
-              const p = picks[s._id] || { quantity: '', points: '' }
+              const p = picks[s._id] || { quantity: '' }
               const q = Number(p.quantity) || 0
-              const pts = p.points === '' || p.points == null ? s.points : p.points
+              const sug = suggestedFor(s, selectedCases)
               const over = q > s.available
               return (
                 <tr key={s._id} className={`border-b last:border-0 ${q > 0 ? 'bg-primary-50' : ''}`}>
@@ -120,24 +139,19 @@ function ItemsPicker({ stock, picks, setPicks, budget = 0, stockHref }) {
                     {fmt(s.available)}
                     {s.reserved > 0 && <div className="text-[11px] text-amber-600">محجوز {fmt(s.reserved)}</div>}
                   </td>
+                  <td className="px-2 py-1.5 text-center text-gray-600">{selectedCases.length ? fmt(sug) : '—'}</td>
                   <td className="px-2 py-1.5 text-center">
                     <input
                       type="number" min="0" step="any" value={p.quantity}
-                      onChange={e => setPick(s._id, { quantity: e.target.value })}
+                      onChange={e => setPick(s._id, e.target.value)}
                       placeholder="0"
                       className={`w-24 text-sm border rounded px-1.5 py-1 ${over ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
                     />
                     {over && <div className="text-[11px] text-red-600">أكبر من المتاح</div>}
+                    {!over && sug > s.available && q === s.available && q > 0 && <div className="text-[11px] text-amber-600">المخزن لا يكفي الحد الأقصى</div>}
                   </td>
-                  <td className="px-2 py-1.5 text-center">
-                    <input
-                      type="number" min="0" step="any" value={p.points === '' ? '' : p.points}
-                      onChange={e => setPick(s._id, { points: e.target.value })}
-                      placeholder={String(s.points ?? 0)}
-                      className="w-20 text-sm border border-gray-300 rounded px-1.5 py-1"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-center font-semibold text-primary-800">{q > 0 ? fmt(q * (Number(pts) || 0)) : '—'}</td>
+                  <td className="px-2 py-1.5 text-center text-gray-700">{fmt(s.points)}</td>
+                  <td className="px-2 py-1.5 text-center font-semibold text-primary-800">{q > 0 ? fmt(q * (Number(s.points) || 0)) : '—'}</td>
                 </tr>
               )
             })}
@@ -357,6 +371,22 @@ export default function AdminUserDeliveriesPage() {
     )
   }
 
+  // Auto-fill untouched rows: Σ limits of the selected cases, capped by what's available
+  function suggest(keepTouched) {
+    setPicks(prev => {
+      const next = {}
+      for (const s of stock) {
+        const cur = prev[s._id]
+        if (keepTouched && cur?.touched) { next[s._id] = cur; continue }
+        const sug = suggestedFor(s, cases.filter(c => selected[c._id] !== undefined))
+        const q = Math.min(sug, s.available)
+        next[s._id] = { quantity: q > 0 ? String(q) : '', touched: false }
+      }
+      return next
+    })
+  }
+  useEffect(() => { if (showForm) suggest(true) }, [selected, stock, showForm]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function reloadStock() {
     fetch(`/api/stock?userId=${userId}`).then(r => r.json()).then(d => setStock(Array.isArray(d) ? d : [])).catch(() => {})
   }
@@ -375,7 +405,7 @@ export default function AdminUserDeliveriesPage() {
     const res = await fetch('/api/deliveries', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, userId, beneficiaries, items: items.map(i => ({ stockItemId: i.stockItemId, quantity: i.quantity, points: i.points })) }),
+      body: JSON.stringify({ ...form, userId, beneficiaries, items: items.map(i => ({ stockItemId: i.stockItemId, quantity: i.quantity })) }),
     })
     setSubmitting(false)
     const data = await res.json().catch(() => ({}))
@@ -440,7 +470,8 @@ export default function AdminUserDeliveriesPage() {
     }
   }
 
-  const selectedPoints = casesPoints(cases.filter(c => selected[c._id] !== undefined))
+  const selectedCases = cases.filter(c => selected[c._id] !== undefined)
+  const selectedPoints = casesPoints(selectedCases)
 
   const shown = deliveries.filter(d =>
     filter === 'all' ? true : filter === 'open' ? d.status === 'scheduled' : d.status !== 'scheduled'
@@ -508,7 +539,7 @@ export default function AdminUserDeliveriesPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">الأصناف</label>
-              <ItemsPicker stock={stock} picks={picks} setPicks={setPicks} budget={selectedPoints} stockHref={`/admin/users/${userId}/deliveries/stock`} />
+              <ItemsPicker stock={stock} picks={picks} setPicks={setPicks} budget={selectedPoints} stockHref={`/admin/users/${userId}/deliveries/stock`} selectedCases={selectedCases} onResuggest={() => suggest(false)} />
             </div>
 
             <div>

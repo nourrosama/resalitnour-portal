@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { authOptions } from '../../../../lib/auth'
 import connectDB from '../../../../lib/mongodb'
 import StockItem from '../../../../models/StockItem'
-import { cleanStockInput } from '../../../../lib/stockInput'
+import CatalogItem from '../../../../models/CatalogItem'
 import { reservedByItem, round } from '../../../../lib/stock'
 
 async function load(session, id) {
@@ -15,7 +15,8 @@ async function load(session, id) {
   return { item }
 }
 
-// PATCH /api/stock/[id]  { name?, unit?, quantity?, points? } — admin or the owner user
+// PATCH /api/stock/[id]  { quantity } — admin or the owner user.
+// Name / unit / points / limits come from جدول الأصناف and can't be changed here.
 export async function PATCH(req, { params }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
@@ -23,26 +24,34 @@ export async function PATCH(req, { params }) {
   const { item, res } = await load(session, params.id)
   if (res) return res
 
-  const { data, error } = cleanStockInput(await req.json(), false)
-  if (error) return NextResponse.json({ error }, { status: 400 })
-  if (data.name && data.name !== item.name && await StockItem.exists({ userId: item.userId, name: data.name })) {
-    return NextResponse.json({ error: 'يوجد صنف آخر بنفس الاسم' }, { status: 409 })
-  }
-  Object.assign(item, data)
+  const body = await req.json()
+  const q = body.quantity === '' || body.quantity == null ? 0 : Number(body.quantity)
+  if (!Number.isFinite(q) || q < 0) return NextResponse.json({ error: 'الكمية يجب أن تكون رقمًا موجبًا' }, { status: 400 })
+  item.quantity = round(q)
+  item.updatedAt = new Date()
   await item.save()
 
+  const cat = item.catalogItemId ? await CatalogItem.findById(item.catalogItemId).lean() : null
   const reserved = round((await reservedByItem(item.userId))[String(item._id)] || 0)
-  return NextResponse.json({ ...item.toObject(), reserved, available: round(Math.max(0, item.quantity - reserved)) })
+  return NextResponse.json({
+    ...item.toObject(),
+    name: cat?.name ?? item.name, unit: cat?.unit ?? item.unit, weight: cat?.weight || '',
+    points: cat ? cat.points : item.points, limits: cat?.limits || null, inCatalog: !!cat,
+    reserved, available: round(Math.max(0, item.quantity - reserved)),
+  })
 }
 
-// DELETE /api/stock/[id] — remove a صنف from the المخزن
-// (open deliveries keep their copy of the item; it just won't reduce any stock)
+// DELETE /api/stock/[id] — only for old rows that are not in جدول الأصناف
+// (table items are removed by the admin from the table itself)
 export async function DELETE(req, { params }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
   await connectDB()
   const { item, res } = await load(session, params.id)
   if (res) return res
+  if (item.catalogItemId && await CatalogItem.exists({ _id: item.catalogItemId })) {
+    return NextResponse.json({ error: 'هذا الصنف من جدول الأصناف — اجعل كميته 0 بدلًا من حذفه' }, { status: 400 })
+  }
   await item.deleteOne()
   return NextResponse.json({ message: 'تم حذف الصنف' })
 }
