@@ -8,9 +8,10 @@ function fmt(n) {
   return Number(n || 0).toLocaleString('ar-EG', { maximumFractionDigits: 3 })
 }
 
-// Choose which الأصناف this beneficiary takes and how much; points are deducted from the case.
+// Choose which الأصناف this beneficiary takes and how much, within the case's points
+// (a fixed allowance per handout — the case's points are not reduced).
 // Each item's maximum = the smallest of: الحد الأقصى for the family size (جدول الأصناف),
-// what's left of it in this delivery, and what the case's remaining points can still pay for.
+// what's left of it in this delivery, and what the case's points can still pay for in this handout.
 function TakeItems({ items, picks, setPicks, casePoints, familyMembers }) {
   const qtyOf = it => Number(picks[it.index]) || 0
   const used = items.reduce((s, it) => s + qtyOf(it) * it.points, 0)
@@ -85,7 +86,7 @@ function TakeItems({ items, picks, setPicks, casePoints, familyMembers }) {
         </table>
       </div>
       <div className={`mt-3 p-3 rounded-lg border text-sm ${over ? 'bg-red-50 border-red-200 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
-        نقاط الحالة: <b>{fmt(casePoints)}</b> — نقاط الأصناف المختارة: <b>{fmt(used)}</b> — المتبقي للحالة بعد التسليم: <b>{fmt(casePoints - used)}</b>
+        نقاط الحالة: <b>{fmt(casePoints)}</b> — نقاط الأصناف المختارة: <b>{fmt(used)}</b> — المتبقي من نقاط هذا التسليم: <b>{fmt(casePoints - used)}</b>
         {over && <div className="mt-1 font-medium">⚠ نقاط الأصناف المختارة أكبر من نقاط الحالة — قلّل الكميات</div>}
       </div>
     </div>
@@ -195,7 +196,7 @@ export default function DeliverBeneficiaryPage() {
           <div className="mt-4 bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg text-sm">
             ✓ تم تسليم «{done.delivery.deliveryType}» للمستفيد {done.beneficiary.caseId?.name} بنجاح.
             {done.takenItems?.length > 0 && (
-              <> استلم: {itemsToText(done.takenItems)} — خُصم {fmt(done.pointsUsed)} نقطة (المتبقي للحالة {fmt(done.casePointsLeft)}).</>
+              <> استلم: {itemsToText(done.takenItems)} — بقيمة {fmt(done.pointsUsed)} من {fmt(done.casePoints)} نقطة.</>
             )}
             {done.closed ? (
               <> اكتمل التسليم لكل المستفيدين وتم نقل الطلب إلى{' '}

@@ -48,8 +48,7 @@ function deliveryItemsTotal(d) {
 
 // ---------- الأصناف picker: rows come from this user's المخزن ----------
 // picks: stockItemId -> { quantity, touched }  (an item is in the delivery when quantity > 0)
-// Untouched rows are auto-filled with the sum of the selected cases' limits (جدول الأصناف),
-// capped by what's available; the admin can change any of them.
+// The admin types every quantity; the "الحد الأقصى للحالات المختارة" column is for reference only.
 function fmt(n) {
   return Number(n || 0).toLocaleString('ar-EG', { maximumFractionDigits: 3 })
 }
@@ -72,7 +71,7 @@ function suggestedFor(s, selectedCases) {
   return selectedCases.reduce((sum, c) => sum + (limitFor(s.limits, c.familyMembers) || 0), 0)
 }
 
-function ItemsPicker({ stock, picks, setPicks, budget = 0, stockHref, selectedCases, onResuggest }) {
+function ItemsPicker({ stock, picks, setPicks, budget = 0, stockHref, selectedCases }) {
   const [search, setSearch] = useState('')
   const [onlyAvailable, setOnlyAvailable] = useState(true)
   const items = buildItems(stock, picks)
@@ -101,15 +100,11 @@ function ItemsPicker({ stock, picks, setPicks, budget = 0, stockHref, selectedCa
           <input type="checkbox" checked={onlyAvailable} onChange={e => setOnlyAvailable(e.target.checked)} />
           المتوفر فقط
         </label>
-        <button type="button" onClick={onResuggest} className="btn-secondary text-sm">↺ إعادة الاقتراح حسب الحالات</button>
         <Link href={stockHref} className="text-sm text-primary-700 hover:underline">تعديل المخزن ←</Link>
       </div>
-      {selectedCases.length === 0 && (
-        <p className="text-xs text-gray-500 mb-2">اختر الحالات المستفيدة أولًا وستُقترح الكميات تلقائيًا حسب عدد أفراد كل أسرة.</p>
-      )}
       {noFamily.length > 0 && (
         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-2">
-          ⚠ {noFamily.length} من الحالات المختارة بدون عدد أفراد الأسرة ولن تُحسب في الاقتراح: {noFamily.map(c => c.name).join('، ')}
+          ⚠ {noFamily.length} من الحالات المختارة بدون عدد أفراد الأسرة: {noFamily.map(c => c.name).join('، ')}
         </p>
       )}
       <div className="border rounded-lg max-h-96 overflow-y-auto">
@@ -148,7 +143,6 @@ function ItemsPicker({ stock, picks, setPicks, budget = 0, stockHref, selectedCa
                       className={`w-24 text-sm border rounded px-1.5 py-1 ${over ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
                     />
                     {over && <div className="text-[11px] text-red-600">أكبر من المتاح</div>}
-                    {!over && sug > s.available && q === s.available && q > 0 && <div className="text-[11px] text-amber-600">المخزن لا يكفي الحد الأقصى</div>}
                   </td>
                   <td className="px-2 py-1.5 text-center text-gray-700">{fmt(s.points)}</td>
                   <td className="px-2 py-1.5 text-center font-semibold text-primary-800">{q > 0 ? fmt(q * (Number(s.points) || 0)) : '—'}</td>
@@ -371,22 +365,6 @@ export default function AdminUserDeliveriesPage() {
     )
   }
 
-  // Auto-fill untouched rows: Σ limits of the selected cases, capped by what's available
-  function suggest(keepTouched) {
-    setPicks(prev => {
-      const next = {}
-      for (const s of stock) {
-        const cur = prev[s._id]
-        if (keepTouched && cur?.touched) { next[s._id] = cur; continue }
-        const sug = suggestedFor(s, cases.filter(c => selected[c._id] !== undefined))
-        const q = Math.min(sug, s.available)
-        next[s._id] = { quantity: q > 0 ? String(q) : '', touched: false }
-      }
-      return next
-    })
-  }
-  useEffect(() => { if (showForm) suggest(true) }, [selected, stock, showForm]) // eslint-disable-line react-hooks/exhaustive-deps
-
   function reloadStock() {
     fetch(`/api/stock?userId=${userId}`).then(r => r.json()).then(d => setStock(Array.isArray(d) ? d : [])).catch(() => {})
   }
@@ -539,7 +517,7 @@ export default function AdminUserDeliveriesPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">الأصناف</label>
-              <ItemsPicker stock={stock} picks={picks} setPicks={setPicks} budget={selectedPoints} stockHref={`/admin/users/${userId}/deliveries/stock`} selectedCases={selectedCases} onResuggest={() => suggest(false)} />
+              <ItemsPicker stock={stock} picks={picks} setPicks={setPicks} budget={selectedPoints} stockHref={`/admin/users/${userId}/deliveries/stock`} selectedCases={selectedCases} />
             </div>
 
             <div>

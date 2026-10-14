@@ -12,7 +12,7 @@ import { remainingPerItem, round, resolveDeliveryItems } from '../../../../../li
 // The user hands this beneficiary the chosen الأصناف:
 //   - each quantity must fit in what is left of that item in the delivery
 //   - and in الحد الأقصى of جدول الأصناف for the case's family size
-//   - Σ quantity × points is deducted from the case's points (must be enough)
+//   - Σ quantity × points must not exceed the case's points (a fixed allowance per handout, never deducted)
 //   - the quantities are deducted from the user's المخزن
 // The delivery closes when all beneficiaries have received.
 export async function POST(req, ctx) {
@@ -102,14 +102,7 @@ async function complete(req, { params }) {
     // the صنف was removed from المخزن: hand it out without touching stock
   }
 
-  // ---- deduct the case's points
-  if (pointsUsed > 0) {
-    const r = await Case.updateOne({ _id: caseDoc._id, points: { $gte: pointsUsed } }, { $inc: { points: -pointsUsed }, $set: { updatedAt: new Date() } })
-    if (!r.modifiedCount) {
-      await rollback()
-      return NextResponse.json({ error: 'نقاط الحالة غير كافية' }, { status: 409 })
-    }
-  }
+  // The case's points are a fixed allowance per handout — they are NOT deducted.
 
   b.status = 'delivered'
   b.deliveredAt = new Date()
@@ -121,9 +114,8 @@ async function complete(req, { params }) {
   try {
     await delivery.save({ validateModifiedOnly: true })
   } catch (err) {
-    // undo the stock / points deductions so nothing is lost
+    // undo the stock deductions so nothing is lost
     await rollback()
-    if (pointsUsed > 0) await Case.updateOne({ _id: caseDoc._id }, { $inc: { points: pointsUsed } })
     throw err
   }
 
@@ -134,7 +126,7 @@ async function complete(req, { params }) {
     delivered: delivery.beneficiaries.filter(x => x.status === 'delivered').length,
     total: delivery.beneficiaries.length,
     pointsUsed,
-    casePointsLeft: round((caseDoc.points || 0) - pointsUsed),
+    casePoints: caseDoc.points || 0,
     takenItems: taken,
   })
 }
