@@ -152,6 +152,7 @@ async function complete(req, { params }) {
     total: delivery.beneficiaries.length,
     pointsUsed,
     casePoints: caseDoc.points || 0,
+    deliveredAt: b.deliveredAt,
     takenItems: taken,
   })
 }

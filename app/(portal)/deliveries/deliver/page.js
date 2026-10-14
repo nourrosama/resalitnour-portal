@@ -3,6 +3,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Panel } from '../../../../components/portal/DeliveryPanel'
 import { itemsToText } from '../../../../lib/foodItems'
+import { printReceipt } from '../../../../lib/receipt'
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ar-EG', { maximumFractionDigits: 3 })
@@ -157,7 +158,7 @@ export default function DeliverBeneficiaryPage() {
     setCompleting(false)
     const data = await res.json().catch(() => ({}))
     if (res.ok) {
-      setDone({ ...found, ...data })
+      setDone({ ...found, ...data, voucherCode: code })
       setFound(null)
       setCode('')
       setNotes('')
@@ -204,6 +205,27 @@ export default function DeliverBeneficiaryPage() {
             ) : (
               <> تم التسليم لـ {done.delivered} من {done.total} مستفيدين في هذا الطلب.</>
             )}
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => printReceipt({
+                  requestNo: done.requestNo || done.delivery.requestNo,
+                  voucherCode: done.voucherCode,
+                  deliveryType: done.delivery.deliveryType,
+                  location: done.delivery.location,
+                  deliveredAt: done.deliveredAt,
+                  caseName: done.beneficiary.caseId?.name,
+                  caseCode: done.beneficiary.caseId?.code,
+                  familyMembers: done.beneficiary.caseId?.familyMembers,
+                  casePoints: done.casePoints ?? done.beneficiary.caseId?.points,
+                  items: done.takenItems || [],
+                })}
+                className="btn-primary text-sm inline-flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                طباعة الإيصال
+              </button>
+            </div>
           </div>
         )}
       </Panel>
