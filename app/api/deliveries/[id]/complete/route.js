@@ -6,9 +6,10 @@ import Delivery from '../../../../../models/Delivery'
 import Case from '../../../../../models/Case'
 import StockItem from '../../../../../models/StockItem'
 import { normalizeCode, closeIfComplete } from '../../../../../lib/deliveryCode'
-import { remainingPerItem, round, resolveDeliveryItems } from '../../../../../lib/stock'
+import { remainingPerItem, round, resolveDeliveryItems, liveItemsFor } from '../../../../../lib/stock'
 
-// POST /api/deliveries/[id]/complete  { code, notes?, items: [{ index, quantity }] }
+// POST /api/deliveries/[id]/complete  { code, notes?, items: [{ key, quantity }] }
+//   key = stock row id (live deliveries) or item index (older deliveries)
 // The user hands this beneficiary the chosen الأصناف:
 //   - each quantity must fit in what is left of that item in the delivery
 //   - and in الحد الأقصى of جدول الأصناف for the case's family size
@@ -45,34 +46,58 @@ async function complete(req, { params }) {
   // ---- the case: points + family size (for the limits in جدول الأصناف)
   const caseDoc = await Case.findById(b.caseId).select('points name familyMembers')
   if (!caseDoc) return NextResponse.json({ error: 'الحالة غير موجودة' }, { status: 404 })
-  const rules = await resolveDeliveryItems(delivery, caseDoc.familyMembers)
-  const limits = rules.map(r => r.limit)
-
-  // ---- validate the chosen items
-  const remaining = remainingPerItem(delivery)
+  const fm = caseDoc.familyMembers
+  const selections = (Array.isArray(items) ? items : [])
+    .map(sel => ({ key: String(sel?.key ?? sel?.index ?? ''), qty: round(Number(sel?.quantity)) }))
+    .filter(sel => sel.key && Number.isFinite(sel.qty) && sel.qty > 0)
   const taken = []
   const seen = new Set()
-  for (const sel of Array.isArray(items) ? items : []) {
-    const idx = Number(sel?.index)
-    const qty = round(Number(sel?.quantity))
-    if (!Number.isFinite(qty) || qty <= 0) continue
-    const it = delivery.items[idx]
-    if (!it || seen.has(idx)) return NextResponse.json({ error: 'صنف غير صالح' }, { status: 400 })
-    seen.add(idx)
-    if (rules[idx].linked && limits[idx] === null) {
+  let canTakeSomething
+
+  if (delivery.stockMode === 'live') {
+    // ---- the whole المخزن, live
+    const live = await liveItemsFor(delivery.userId, fm)
+    const byKey = Object.fromEntries(live.map(it => [it.key, it]))
+    if (selections.length && !(Number(fm) >= 1)) {
       return NextResponse.json({ error: 'حدد عدد أفراد الأسرة لهذه الحالة أولًا (من صفحة الحالات)' }, { status: 400 })
     }
-    if (limits[idx] !== null && qty > limits[idx]) {
-      return NextResponse.json({ error: `الحد الأقصى من ${it.name} لأسرة من ${caseDoc.familyMembers} أفراد هو ${limits[idx]}` }, { status: 400 })
+    for (const sel of selections) {
+      const it = byKey[sel.key]
+      if (!it || seen.has(sel.key)) return NextResponse.json({ error: 'صنف غير متوفر في المخزن' }, { status: 400 })
+      seen.add(sel.key)
+      if (it.limit !== null && sel.qty > it.limit) {
+        return NextResponse.json({ error: `الحد الأقصى من ${it.name} لأسرة من ${fm} أفراد هو ${it.limit}` }, { status: 400 })
+      }
+      if (sel.qty > it.available) {
+        return NextResponse.json({ error: `المتوفر من ${it.name} في المخزن ${it.available} فقط` }, { status: 400 })
+      }
+      taken.push({ stockItemId: it.stockItemId, catalogItemId: it.catalogItemId, name: it.name, unit: it.unit, quantity: sel.qty, points: it.points })
     }
-    if (qty > remaining[idx]) {
-      return NextResponse.json({ error: `المتبقي من ${it.name} في هذا التسليم ${Math.max(0, remaining[idx])} فقط` }, { status: 400 })
+    canTakeSomething = live.some(it => it.limit !== 0 && it.points <= (caseDoc.points || 0))
+  } else {
+    // ---- older deliveries: fixed quantities per item
+    const rules = await resolveDeliveryItems(delivery, fm)
+    const remaining = remainingPerItem(delivery)
+    for (const sel of selections) {
+      const idx = Number(sel.key)
+      const it = delivery.items[idx]
+      if (!it || seen.has(idx)) return NextResponse.json({ error: 'صنف غير صالح' }, { status: 400 })
+      seen.add(idx)
+      if (rules[idx].linked && rules[idx].limit === null) {
+        return NextResponse.json({ error: 'حدد عدد أفراد الأسرة لهذه الحالة أولًا (من صفحة الحالات)' }, { status: 400 })
+      }
+      if (rules[idx].limit !== null && sel.qty > rules[idx].limit) {
+        return NextResponse.json({ error: `الحد الأقصى من ${it.name} لأسرة من ${fm} أفراد هو ${rules[idx].limit}` }, { status: 400 })
+      }
+      if (sel.qty > remaining[idx]) {
+        return NextResponse.json({ error: `المتبقي من ${it.name} في هذا التسليم ${Math.max(0, remaining[idx])} فقط` }, { status: 400 })
+      }
+      taken.push({ itemIndex: idx, stockItemId: it.stockItemId, name: it.name, unit: rules[idx].unit, quantity: sel.qty, points: rules[idx].points })
     }
-    taken.push({ itemIndex: idx, stockItemId: it.stockItemId, name: it.name, unit: rules[idx].unit, quantity: qty, points: rules[idx].points })
+    canTakeSomething = delivery.items.some((it, idx) =>
+      remaining[idx] > 0 && rules[idx].limit !== 0 && rules[idx].points <= (caseDoc.points || 0))
   }
-  // something this case could still take (left in the delivery, allowed for its family size, affordable)
-  const canTakeSomething = delivery.items.some((it, idx) =>
-    remaining[idx] > 0 && limits[idx] !== 0 && rules[idx].points <= (caseDoc.points || 0))
+  // something this case could still take but nothing was chosen
   if (canTakeSomething && !taken.length) {
     return NextResponse.json({ error: 'اختر الأصناف التي سيستلمها المستفيد وكمياتها' }, { status: 400 })
   }

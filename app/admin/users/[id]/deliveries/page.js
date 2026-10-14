@@ -3,8 +3,8 @@ import { useState, useEffect, Fragment } from 'react'
 import { useParams } from 'next/navigation'
 import { whatsappLink, smsLink, isValidEgyptMobile } from '../../../../../lib/phone'
 import Link from 'next/link'
-import { itemsToText, itemPoints, itemsTotalPoints, casesPoints } from '../../../../../lib/foodItems'
-import { limitFor } from '../../../../../lib/catalog'
+import { itemsToText, casesPoints } from '../../../../../lib/foodItems'
+import { deliveryReport } from '../../../../../lib/catalog'
 
 const statusMap = {
   scheduled: { label: 'مفتوح', cls: 'badge-pending' },
@@ -41,126 +41,71 @@ function ManualSendButtons({ phone, text }) {
 function deliveryBudget(d) {
   return d.deliveryPoints || casesPoints((d.beneficiaries || []).map(b => b.caseId))
 }
-// إجمالي نقاط التسليم: stored value, or computed from the items
-function deliveryItemsTotal(d) {
-  return d.totalPoints || itemsTotalPoints(d.items)
-}
 
-// ---------- الأصناف picker: rows come from this user's المخزن ----------
-// picks: stockItemId -> { quantity, touched }  (an item is in the delivery when quantity > 0)
-// The admin types every quantity; the "الحد الأقصى للحالات المختارة" column is for reference only.
 function fmt(n) {
   return Number(n || 0).toLocaleString('ar-EG', { maximumFractionDigits: 3 })
 }
 
-function buildItems(stock, picks) {
-  return stock
-    .filter(s => Number(picks[s._id]?.quantity) > 0)
-    .map(s => ({
-      stockItemId: s._id,
-      name: s.name,
-      unit: s.unit,
-      quantity: picks[s._id].quantity,
-      points: s.points,
-      available: s.available,
-    }))
+// Σ points the beneficiaries actually used in a delivery
+function pointsUsed(d) {
+  return (d.beneficiaries || []).reduce((s, b) => s + (Number(b.pointsUsed) || 0), 0)
 }
 
-// Σ الحد الأقصى of the selected cases for one stock row
-function suggestedFor(s, selectedCases) {
-  return selectedCases.reduce((sum, c) => sum + (limitFor(s.limits, c.familyMembers) || 0), 0)
-}
-
-function ItemsPicker({ stock, picks, setPicks, budget = 0, stockHref, selectedCases }) {
-  const [search, setSearch] = useState('')
-  const [onlyAvailable, setOnlyAvailable] = useState(true)
-  const items = buildItems(stock, picks)
-  const total = itemsTotalPoints(items)
-  const shown = stock.filter(s =>
-    (!search || s.name.includes(search)) && (!onlyAvailable || s.available > 0 || Number(picks[s._id]?.quantity) > 0))
-  const noFamily = selectedCases.filter(c => !(Number(c.familyMembers) >= 1))
-
-  function setPick(id, quantity) {
-    setPicks({ ...picks, [id]: { quantity, touched: true } })
-  }
-
-  if (!stock.length) {
-    return (
-      <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-        مخزن هذا المستخدم فارغ — أضف الكميات من <Link href={stockHref} className="underline font-medium">المخزن</Link> أولًا.
-      </p>
-    )
-  }
-
+// ---------- taken / remaining report of one delivery ----------
+function ReportModal({ delivery, onClose }) {
+  const rows = deliveryReport(delivery)
+  const live = delivery.stockMode === 'live'
+  const got = (delivery.beneficiaries || []).filter(b => b.status === 'delivered').length
+  const totalTaken = rows.reduce((s, r) => s + r.taken, 0)
   return (
-    <div>
-      <div className="flex gap-3 items-center mb-2 flex-wrap">
-        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث عن صنف..." className="input-field flex-1 min-w-48" />
-        <label className="flex items-center gap-1.5 text-sm text-gray-600">
-          <input type="checkbox" checked={onlyAvailable} onChange={e => setOnlyAvailable(e.target.checked)} />
-          المتوفر فقط
-        </label>
-        <Link href={stockHref} className="text-sm text-primary-700 hover:underline">تعديل المخزن ←</Link>
-      </div>
-      {noFamily.length > 0 && (
-        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-2">
-          ⚠ {noFamily.length} من الحالات المختارة بدون عدد أفراد الأسرة: {noFamily.map(c => c.name).join('، ')}
-        </p>
-      )}
-      <div className="border rounded-lg max-h-96 overflow-y-auto">
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-gray-50">
-            <tr className="border-b text-gray-600">
-              <th className="text-right px-3 py-2">الصنف</th>
-              <th className="text-center px-2 py-2">المتاح بالمخزن</th>
-              <th className="text-center px-2 py-2">الحد الأقصى للحالات المختارة</th>
-              <th className="text-center px-2 py-2">الكمية في التسليم</th>
-              <th className="text-center px-2 py-2">النقاط لكل وحدة</th>
-              <th className="text-center px-2 py-2">النقاط</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.length === 0 ? (
-              <tr><td colSpan={6} className="text-center text-gray-400 py-6">لا توجد أصناف متوفرة</td></tr>
-            ) : shown.map(s => {
-              const p = picks[s._id] || { quantity: '' }
-              const q = Number(p.quantity) || 0
-              const sug = suggestedFor(s, selectedCases)
-              const over = q > s.available
-              return (
-                <tr key={s._id} className={`border-b last:border-0 ${q > 0 ? 'bg-primary-50' : ''}`}>
-                  <td className="px-3 py-1.5 font-medium text-gray-800">{s.name} <span className="text-xs text-gray-500">({s.unit || '—'})</span></td>
-                  <td className="px-2 py-1.5 text-center text-gray-700">
-                    {fmt(s.available)}
-                    {s.reserved > 0 && <div className="text-[11px] text-amber-600">محجوز {fmt(s.reserved)}</div>}
-                  </td>
-                  <td className="px-2 py-1.5 text-center text-gray-600">{selectedCases.length ? fmt(sug) : '—'}</td>
-                  <td className="px-2 py-1.5 text-center">
-                    <input
-                      type="number" min="0" step="any" value={p.quantity}
-                      onChange={e => setPick(s._id, e.target.value)}
-                      placeholder="0"
-                      className={`w-24 text-sm border rounded px-1.5 py-1 ${over ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
-                    />
-                    {over && <div className="text-[11px] text-red-600">أكبر من المتاح</div>}
-                  </td>
-                  <td className="px-2 py-1.5 text-center text-gray-700">{fmt(s.points)}</td>
-                  <td className="px-2 py-1.5 text-center font-semibold text-primary-800">{q > 0 ? fmt(q * (Number(s.points) || 0)) : '—'}</td>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="p-6">
+          <div className="flex items-start justify-between gap-4 mb-1">
+            <h2 className="text-lg font-bold text-gray-900">تفاصيل الأصناف — {delivery.requestNo}</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">
+            {delivery.deliveryType} — استلم {got} من {delivery.beneficiaries?.length || 0} مستفيدين — النقاط المستخدمة {fmt(pointsUsed(delivery))}
+          </p>
+          <table className="w-full text-sm border rounded-lg overflow-hidden">
+            <thead className="bg-gray-50">
+              <tr className="border-b text-gray-600">
+                <th className="text-right px-3 py-2">الصنف</th>
+                <th className="text-center px-2 py-2">{live ? 'بالمخزن عند فتح التسليم' : 'الكمية في التسليم'}</th>
+                <th className="text-center px-2 py-2">تم استلامه</th>
+                <th className="text-center px-2 py-2">{live ? 'المتبقي (رجع للمخزن)' : 'المتبقي'}</th>
+                <th className="text-center px-2 py-2">النقاط المستخدمة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} className={`border-b last:border-0 ${r.taken > 0 ? 'bg-primary-50/50' : ''}`}>
+                  <td className="px-3 py-1.5 font-medium text-gray-800">{r.name} <span className="text-xs text-gray-500">{r.unit ? `(${r.unit})` : ''}</span></td>
+                  <td className="px-2 py-1.5 text-center text-gray-600">{fmt(r.offered)}</td>
+                  <td className={`px-2 py-1.5 text-center font-semibold ${r.taken > 0 ? 'text-primary-800' : 'text-gray-400'}`}>{fmt(r.taken)}</td>
+                  <td className="px-2 py-1.5 text-center text-green-700">{fmt(r.remaining)}</td>
+                  <td className="px-2 py-1.5 text-center text-gray-600">{r.points ? fmt(r.points) : '—'}</td>
                 </tr>
-              )
-            })}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+            <tfoot className="bg-gray-50 font-semibold">
+              <tr>
+                <td className="px-3 py-2">الإجمالي</td>
+                <td />
+                <td className="px-2 py-2 text-center">{fmt(totalTaken)}</td>
+                <td />
+                <td className="px-2 py-2 text-center">{fmt(pointsUsed(delivery))}</td>
+              </tr>
+            </tfoot>
+          </table>
+          {live && (
+            <p className="text-xs text-gray-500 mt-3">
+              يُخصم من المخزن فقط ما استلمه المستفيدون فعلًا؛ المتبقي لم يخرج من المخزن أصلًا.
+            </p>
+          )}
+        </div>
       </div>
-      <p className="mt-2 text-sm text-gray-700">
-        الأصناف المختارة: <b>{items.length}</b> — إجمالي نقاط التسليم (الكمية × النقاط): <b className="text-primary-800">{fmt(total)}</b>
-        <span className="text-gray-500"> من {fmt(budget)}</span>
-      </p>
-      {total > budget && (
-        <p className="mt-1 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">
-          ⚠ إجمالي نقاط التسليم ({fmt(total)}) أكبر من عدد نقاط التسليم ({fmt(budget)}) بفارق {fmt(total - budget)}
-        </p>
-      )}
     </div>
   )
 }
@@ -323,7 +268,7 @@ export default function AdminUserDeliveriesPage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [stock, setStock] = useState([])
-  const [picks, setPicks] = useState({}) // stockItemId -> { quantity, points }
+  const [report, setReport] = useState(null) // delivery shown in the تفاصيل الأصناف window
   const [selected, setSelected] = useState({}) // caseId -> phone
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -375,15 +320,12 @@ export default function AdminUserDeliveriesPage() {
     setNotice(null)
     const beneficiaries = Object.entries(selected).map(([caseId, phone]) => ({ caseId, phone }))
     if (!beneficiaries.length) return setError('اختر حالة واحدة على الأقل')
-    const items = buildItems(stock, picks)
-    if (!items.length) return setError('اختر صنفًا واحدًا على الأقل من المخزن وحدد كميته')
-    const over = items.find(i => Number(i.quantity) > i.available)
-    if (over) return setError(`كمية ${over.name} (${over.quantity}) أكبر من المتاح بالمخزن (${over.available})`)
+    if (!stock.some(s => s.inCatalog && s.available > 0)) return setError('مخزن هذا المستخدم فارغ — أضف الكميات في المخزن أولًا')
     setSubmitting(true)
     const res = await fetch('/api/deliveries', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, userId, beneficiaries, items: items.map(i => ({ stockItemId: i.stockItemId, quantity: i.quantity })) }),
+      body: JSON.stringify({ ...form, userId, beneficiaries }),
     })
     setSubmitting(false)
     const data = await res.json().catch(() => ({}))
@@ -394,7 +336,6 @@ export default function AdminUserDeliveriesPage() {
       if (!data.sms) setNotice({ type: 'ok', text: `تم إنشاء التسليم ${data.delivery.requestNo} بكود ${data.delivery.codePrefix} — لم يتم إرسال رسائل بعد.` })
       setShowForm(false)
       setForm(emptyForm)
-      setPicks({})
       setSelected({})
       reloadStock()
     } else {
@@ -416,6 +357,24 @@ export default function AdminUserDeliveriesPage() {
       rememberSms(data.sms)
     } else {
       setNotice({ type: 'err', text: data.error || 'فشل الإرسال' })
+    }
+  }
+
+  async function handleClose(delivery) {
+    const pending = (delivery.beneficiaries || []).filter(b => b.status !== 'delivered').length
+    if (!confirm(`إغلاق التسليم ${delivery.requestNo || ''}؟${pending ? `\n${pending} من المستفيدين لم يستلموا ولن يمكنهم الاستلام بعد الإغلاق.` : ''}\nما لم يُستلم يبقى في المخزن.`)) return
+    setSendingKey('c' + delivery._id)
+    const res = await fetch(`/api/deliveries/${delivery._id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'close' }),
+    })
+    setSendingKey(null)
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) {
+      setDeliveries(deliveries.map(d => (d._id === delivery._id ? data.delivery : d)))
+      setNotice({ type: 'ok', text: `تم إغلاق التسليم ${delivery.requestNo || ''} — ما لم يُستلم بقي في المخزن` })
+      reloadStock()
+    } else {
+      setNotice({ type: 'err', text: data.error || 'تعذر إغلاق التسليم' })
     }
   }
 
@@ -517,7 +476,21 @@ export default function AdminUserDeliveriesPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">الأصناف</label>
-              <ItemsPicker stock={stock} picks={picks} setPicks={setPicks} budget={selectedPoints} stockHref={`/admin/users/${userId}/deliveries/stock`} selectedCases={selectedCases} />
+              {(() => {
+                const avail = stock.filter(s => s.inCatalog && s.available > 0)
+                return avail.length ? (
+                  <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 text-sm text-gray-700">
+                    <b className="text-primary-900">كل المخزن متاح في هذا التسليم ({avail.length} صنف)</b> — يختار كل مستفيد ما يحتاجه عند
+                    &quot;تسليم المستفيد&quot; في حدود نقاطه والحد الأقصى لعدد أفراد أسرته، ويُخصم من المخزن ما يستلمه فقط.
+                    <div className="text-xs text-gray-500 mt-1">{avail.map(s => `${s.name} (${fmt(s.available)})`).join('، ')}</div>
+                    <Link href={`/admin/users/${userId}/deliveries/stock`} className="text-xs text-primary-700 hover:underline">تعديل المخزن ←</Link>
+                  </div>
+                ) : (
+                  <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    مخزن هذا المستخدم فارغ — أضف الكميات من <Link href={`/admin/users/${userId}/deliveries/stock`} className="underline font-medium">المخزن</Link> أولًا.
+                  </p>
+                )
+              })()}
             </div>
 
             <div>
@@ -589,20 +562,10 @@ export default function AdminUserDeliveriesPage() {
                         <td className="px-3 py-3 font-mono text-gray-700 border-b">{d.requestNo || '—'}</td>
                         <td className="px-3 py-3 text-gray-800 font-medium border-b">{d.deliveryType}</td>
                         <td className="px-3 py-3 text-center font-mono font-bold text-primary-800 border-b">{d.codePrefix}</td>
-                        <td className="px-3 py-3 text-gray-600 border-b text-xs max-w-xs">{itemsToText(d.items) || '—'}</td>
+                        <td className="px-3 py-3 text-gray-600 border-b text-xs max-w-xs">{d.stockMode === 'live' ? `كل المخزن (${d.items?.length || 0} صنف)` : (itemsToText(d.items) || '—')}</td>
                         <td className="px-3 py-3 text-center border-b">
-                          {(() => {
-                            const budget = deliveryBudget(d)
-                            const used = deliveryItemsTotal(d)
-                            return (
-                              <>
-                                <span className="font-semibold text-primary-800">{budget}</span>
-                                <div className={`text-[11px] ${used > budget ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
-                                  الأصناف: {used}{used > budget ? ' ⚠ أكبر من عدد النقاط' : ''}
-                                </div>
-                              </>
-                            )
-                          })()}
+                          <span className="font-semibold text-primary-800">{fmt(deliveryBudget(d))}</span>
+                          <div className="text-[11px] text-gray-500">المستخدم: {fmt(pointsUsed(d))}</div>
                         </td>
                         <td className="px-3 py-3 text-center border-b">{got} / {total}</td>
                         <td className="px-3 py-3 text-center border-b"><span className={`badge ${s.cls}`}>{s.label}</span></td>
@@ -614,6 +577,12 @@ export default function AdminUserDeliveriesPage() {
                           <button onClick={() => setExpanded(isOpen ? null : d._id)} className="text-xs text-primary-700 hover:text-primary-900 font-medium">
                             {isOpen ? 'إخفاء' : 'المستفيدون والأكواد'}
                           </button>
+                          <button onClick={() => setReport(d)} className="text-xs text-gray-700 hover:text-primary-800 font-medium mr-3">تفاصيل الأصناف</button>
+                          {d.status === 'scheduled' && (
+                            <button onClick={() => handleClose(d)} disabled={sendingKey === 'c' + d._id} className="text-xs text-amber-700 hover:text-amber-900 font-medium mr-3">
+                              {sendingKey === 'c' + d._id ? '...' : 'إغلاق'}
+                            </button>
+                          )}
                           <button onClick={() => handleDelete(d)} disabled={sendingKey === 'd' + d._id} className="text-xs text-red-600 hover:text-red-800 font-medium mr-3">
                             {sendingKey === 'd' + d._id ? '...' : 'حذف'}
                           </button>
@@ -649,6 +618,7 @@ export default function AdminUserDeliveriesPage() {
           </div>
         )}
       </div>
+      {report && <ReportModal delivery={report} onClose={() => setReport(null)} />}
     </div>
   )
 }

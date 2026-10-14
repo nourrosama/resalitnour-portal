@@ -5,7 +5,7 @@ import connectDB from '../../../../lib/mongodb'
 import Delivery from '../../../../models/Delivery'
 import '../../../../models/Case'
 import { normalizeCode, migrateLegacyDeliveries } from '../../../../lib/deliveryCode'
-import { remainingPerItem, numQty, resolveDeliveryItems } from '../../../../lib/stock'
+import { remainingPerItem, resolveDeliveryItems, liveItemsFor } from '../../../../lib/stock'
 
 // POST /api/deliveries/verify  { code } — the user looks up a beneficiary by their voucher code
 export async function POST(req) {
@@ -41,22 +41,37 @@ async function verify(req) {
   }
 
   const o = delivery.toObject()
-  const remaining = remainingPerItem(o)
   const familyMembers = b.caseId?.familyMembers
-  const rules = await resolveDeliveryItems(o, familyMembers)
+  let items, needsFamilySize
+  if (o.stockMode === 'live') {
+    // the whole المخزن, live: remaining = what's in stock right now
+    const live = await liveItemsFor(o.userId, familyMembers)
+    items = live.map(it => ({
+      key: it.key, name: it.name, unit: it.unit, points: it.points,
+      remaining: it.available, limit: it.limit,
+      max: it.limit === null ? it.available : Math.max(0, Math.min(it.limit, it.available)),
+    }))
+    needsFamilySize = familyMembers == null || !(Number(familyMembers) >= 1)
+  } else {
+    // older deliveries: fixed quantities per item
+    const remaining = remainingPerItem(o)
+    const rules = await resolveDeliveryItems(o, familyMembers)
+    items = (o.items || []).map((it, idx) => ({
+      key: String(idx), name: it.name, unit: rules[idx].unit, points: rules[idx].points,
+      remaining: Math.max(0, remaining[idx]),
+      limit: rules[idx].limit, // الحد الأقصى for this case's family size (null = no rule)
+      max: rules[idx].limit === null ? Math.max(0, remaining[idx]) : Math.max(0, Math.min(rules[idx].limit, remaining[idx])),
+    }))
+    needsFamilySize = rules.some(r => r.linked && r.limit === null)
+  }
   const { code: _c, phone, smsError, smsStatus, smsSentAt, smsGatewayId, smsState, ...beneficiary } = b.toObject()
   return NextResponse.json({
     delivery: {
       _id: o._id, requestNo: o.requestNo, deliveryType: o.deliveryType, amount: o.amount,
-      // each item with how much is still left in this delivery for the remaining beneficiaries
-      items: (o.items || []).map((it, idx) => ({
-        index: idx, name: it.name, unit: rules[idx].unit, points: rules[idx].points,
-        quantity: numQty(it.quantity), remaining: Math.max(0, remaining[idx]),
-        limit: rules[idx].limit, // الحد الأقصى for this case's family size (null = no rule)
-        max: rules[idx].limit === null ? Math.max(0, remaining[idx]) : Math.max(0, Math.min(rules[idx].limit, remaining[idx])),
-      })),
+      stockMode: o.stockMode || 'reserved',
+      items,
       familyMembers: familyMembers ?? null,
-      needsFamilySize: rules.some(r => r.linked && r.limit === null),
+      needsFamilySize,
       location: o.location, scheduledFor: o.scheduledFor, notes: o.notes,
       total: o.beneficiaries.length,
       delivered: o.beneficiaries.filter(x => x.status === 'delivered').length,

@@ -24,8 +24,9 @@ const ItemSchema = new mongoose.Schema({
 
 // What one beneficiary actually took at "تسليم المستفيد"
 const TakenItemSchema = new mongoose.Schema({
-  itemIndex: { type: Number, required: true }, // index in delivery.items
+  itemIndex: { type: Number }, // index in delivery.items (older deliveries only)
   stockItemId: { type: mongoose.Schema.Types.ObjectId, ref: 'StockItem' },
+  catalogItemId: { type: mongoose.Schema.Types.ObjectId, ref: 'CatalogItem' },
   name: { type: String },
   unit: { type: String },
   quantity: { type: Number, required: true },
@@ -54,6 +55,11 @@ const DeliverySchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true }, // owner organization
   codePrefix: { type: String, required: true },
   deliveryType: { type: String, required: true }, // اسم الطلب / نوع التسليم
+  // 'live'  = the whole المخزن is offered (like a supermarket): nothing is reserved, every handout
+  //           takes from the live stock, so whatever isn't taken simply stays in المخزن.
+  //           items[] is a snapshot of the stock when the delivery was opened (for the report).
+  // missing / 'reserved' = older deliveries with fixed quantities per item.
+  stockMode: { type: String, enum: ['reserved', 'live'] },
   items: [ItemSchema], // الأصناف
   amount: { type: Number },
   deliveryPoints: { type: Number, default: 0 }, // عدد النقاط = مجموع نقاط الحالات المستفيدة
@@ -87,7 +93,7 @@ DeliverySchema.pre('save', async function (next) {
 
 // In dev, hot reload keeps the previously compiled model in memory. If that cached model
 // was built from an older schema (no beneficiaries[]), drop it so the new schema is used.
-if (mongoose.models.Delivery && (!mongoose.models.Delivery.schema.path('beneficiaries.smsState') || !mongoose.models.Delivery.schema.path('items.catalogItemId'))) {
+if (mongoose.models.Delivery && (!mongoose.models.Delivery.schema.path('beneficiaries.smsState') || !mongoose.models.Delivery.schema.path('stockMode'))) {
   mongoose.deleteModel('Delivery')
 }
 

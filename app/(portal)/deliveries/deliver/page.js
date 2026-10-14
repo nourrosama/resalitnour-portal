@@ -12,8 +12,8 @@ function fmt(n) {
 // (a fixed allowance per handout — the case's points are not reduced).
 // Each item's maximum = the smallest of: الحد الأقصى for the family size (جدول الأصناف),
 // what's left of it in this delivery, and what the case's points can still pay for in this handout.
-function TakeItems({ items, picks, setPicks, casePoints, familyMembers }) {
-  const qtyOf = it => Number(picks[it.index]) || 0
+function TakeItems({ items, picks, setPicks, casePoints, familyMembers, live }) {
+  const qtyOf = it => Number(picks[it.key]) || 0
   const used = items.reduce((s, it) => s + qtyOf(it) * it.points, 0)
   const over = used > casePoints
 
@@ -37,7 +37,7 @@ function TakeItems({ items, picks, setPicks, casePoints, familyMembers }) {
           <thead className="bg-gray-50">
             <tr className="border-b text-gray-600">
               <th className="text-right px-3 py-2">الصنف</th>
-              <th className="text-center px-2 py-2">المتبقي في هذا التسليم</th>
+              <th className="text-center px-2 py-2">{live ? 'المتوفر بالمخزن' : 'المتبقي في هذا التسليم'}</th>
               <th className="text-center px-2 py-2">الحد الأقصى للأسرة</th>
               <th className="text-center px-2 py-2">النقاط لكل وحدة</th>
               <th className="text-center px-2 py-2">الكمية للمستفيد</th>
@@ -51,7 +51,7 @@ function TakeItems({ items, picks, setPicks, casePoints, familyMembers }) {
               const locked = it.max <= 0
               const tooMuch = q > it.max
               return (
-                <tr key={it.index} className={`border-b last:border-0 ${q > 0 ? 'bg-primary-50' : ''} ${locked ? 'opacity-50' : ''}`}>
+                <tr key={it.key} className={`border-b last:border-0 ${q > 0 ? 'bg-primary-50' : ''} ${locked ? 'opacity-50' : ''}`}>
                   <td className="px-3 py-1.5 font-medium text-gray-800">{it.name} <span className="text-xs text-gray-500">({it.unit || '—'})</span></td>
                   <td className="px-2 py-1.5 text-center">{fmt(it.remaining)}</td>
                   <td className={`px-2 py-1.5 text-center font-semibold ${it.limit === 0 ? 'text-red-500' : 'text-gray-800'}`}>
@@ -63,20 +63,20 @@ function TakeItems({ items, picks, setPicks, casePoints, familyMembers }) {
                       <input
                         type="number" min="0" step="1" max={it.max}
                         disabled={locked}
-                        value={picks[it.index] ?? ''}
+                        value={picks[it.key] ?? ''}
                         onChange={e => {
                           let v = e.target.value
                           if (v !== '' && Number(v) > it.max) v = String(it.max) // can't go above the limit
-                          setPicks({ ...picks, [it.index]: v })
+                          setPicks({ ...picks, [it.key]: v })
                         }}
                         placeholder="0"
                         className={`w-20 text-sm border rounded px-1.5 py-1 ${tooMuch ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
                       />
                       {!locked && max > 0 && (
-                        <button type="button" onClick={() => setPicks({ ...picks, [it.index]: String(max) })} className="text-[11px] text-primary-700 hover:underline whitespace-nowrap">الحد الأقصى</button>
+                        <button type="button" onClick={() => setPicks({ ...picks, [it.key]: String(max) })} className="text-[11px] text-primary-700 hover:underline whitespace-nowrap">الحد الأقصى</button>
                       )}
                     </div>
-                    {locked && <div className="text-[11px] text-gray-500">{it.limit === 0 ? 'غير مسموح لهذه الأسرة' : 'نفد من التسليم'}</div>}
+                    {locked && <div className="text-[11px] text-gray-500">{it.limit === 0 ? 'غير مسموح لهذه الأسرة' : (live ? 'نفد من المخزن' : 'نفد من التسليم')}</div>}
                   </td>
                   <td className="px-2 py-1.5 text-center font-semibold text-primary-800">{q > 0 ? fmt(q * it.points) : '—'}</td>
                 </tr>
@@ -132,7 +132,7 @@ export default function DeliverBeneficiaryPage() {
   async function handleComplete() {
     setError('')
     const items = (found.delivery.items || [])
-      .map(it => ({ index: it.index, quantity: Number(picks[it.index]) || 0, it }))
+      .map(it => ({ key: it.key, quantity: Number(picks[it.key]) || 0, it }))
       .filter(x => x.quantity > 0)
     const bad = items.find(x => x.quantity > x.it.max)
     if (bad) {
@@ -152,7 +152,7 @@ export default function DeliverBeneficiaryPage() {
     const res = await fetch(`/api/deliveries/${found.delivery._id}/complete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, notes, items: items.map(({ index, quantity }) => ({ index, quantity })) }),
+      body: JSON.stringify({ code, notes, items: items.map(({ key, quantity }) => ({ key, quantity })) }),
     })
     setCompleting(false)
     const data = await res.json().catch(() => ({}))
@@ -230,7 +230,7 @@ export default function DeliverBeneficiaryPage() {
           </div>
           {d.notes && <p className="text-sm text-gray-600 mt-3">ملاحظات الإدارة: {d.notes}</p>}
           {d.items?.length > 0 && (
-            <TakeItems items={d.items} picks={picks} setPicks={setPicks} casePoints={Number(b.caseId?.points) || 0} familyMembers={b.caseId?.familyMembers} />
+            <TakeItems items={d.items} picks={picks} setPicks={setPicks} casePoints={Number(b.caseId?.points) || 0} familyMembers={b.caseId?.familyMembers} live={d.stockMode === 'live'} />
           )}
           <div className="mt-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">ملاحظات التسليم (اختياري)</label>

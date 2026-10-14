@@ -3,6 +3,18 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { itemsToText } from '../../lib/foodItems'
 
+// "live" deliveries offer the whole المخزن — show what was actually handed out instead
+function mergeTaken(d) {
+  const m = new Map()
+  for (const b of d.beneficiaries || []) for (const t of b.takenItems || []) {
+    const k = t.name
+    const cur = m.get(k) || { name: t.name, unit: t.unit, quantity: 0 }
+    cur.quantity += Number(t.quantity) || 0
+    m.set(k, cur)
+  }
+  return [...m.values()]
+}
+
 // Panel with the green title bar used on the delivery pages (EFB style)
 export function Panel({ title, children }) {
   return (
@@ -59,7 +71,7 @@ export function DeliveriesTable({ deliveries, loading, closed = false }) {
               <tr key={d._id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                 <td className="px-3 py-3 font-mono text-primary-700 border-b">{d.requestNo || '—'}</td>
                 <td className="px-3 py-3 text-gray-800 font-medium border-b">{d.deliveryType}</td>
-                <td className="px-3 py-3 text-gray-600 border-b text-xs max-w-[12rem]">{itemsToText(d.items) || '—'}</td>
+                <td className="px-3 py-3 text-gray-600 border-b text-xs max-w-[12rem]">{d.stockMode === 'live' ? (d.beneficiaries?.some(b => b.takenItems?.length) ? itemsToText(mergeTaken(d)) : 'كل المخزن') : (itemsToText(d.items) || '—')}</td>
                 <td className="px-3 py-3 text-center border-b" title={(d.beneficiaries || []).map(b => b.caseId?.name).join('، ')}>
                   {(d.beneficiaries || []).filter(b => b.status === 'delivered').length} / {(d.beneficiaries || []).length}
                 </td>

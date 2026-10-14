@@ -8,10 +8,8 @@ import User from '../../../models/User'
 import {
   generateDeliveryPrefix, generateCaseCode, sendBeneficiaryCode, migrateLegacyDeliveries, sanitizeForUser,
 } from '../../../lib/deliveryCode'
-import { itemsTotalPoints, casesPoints } from '../../../lib/foodItems'
-import StockItem from '../../../models/StockItem'
-import CatalogItem from '../../../models/CatalogItem'
-import { reservedByItem, round } from '../../../lib/stock'
+import { casesPoints } from '../../../lib/foodItems'
+import { stockWithReserved } from '../../../lib/stock'
 
 // Sending waits for the gateway phone to confirm (~12s); allow longer than the default on hosts like Vercel
 export const maxDuration = 30
@@ -54,7 +52,7 @@ export async function GET(req) {
 }
 
 // POST /api/deliveries (admin)
-// { userId, beneficiaries: [{ caseId, phone }], deliveryType, items: [{ stockItemId, quantity }]  (points from جدول الأصناف),
+// { userId, beneficiaries: [{ caseId, phone }], deliveryType,  (الأصناف = the whole المخزن)
 //   location, scheduledFor, notes, sendSms }
 export async function POST(req) {
   const session = await getServerSession(authOptions)
@@ -77,39 +75,22 @@ export async function POST(req) {
   }
   const caseById = Object.fromEntries(cases.map(c => [String(c._id), c]))
 
-  // الأصناف come from this user's المخزن; each quantity must fit in what is still available
-  // (stock minus what other open deliveries have reserved)
-  const wantedItems = items.filter(i => i?.stockItemId && Number(i.quantity) > 0)
-  if (!wantedItems.length) return NextResponse.json({ error: 'اختر صنفًا واحدًا على الأقل من المخزن' }, { status: 400 })
-  const stockRows = await StockItem.find({ _id: { $in: wantedItems.map(i => i.stockItemId) }, userId })
-  const stockById = Object.fromEntries(stockRows.map(r => [String(r._id), r]))
-  const catalogRows = await CatalogItem.find({ _id: { $in: stockRows.map(r => r.catalogItemId).filter(Boolean) } }).lean()
-  const catById = Object.fromEntries(catalogRows.map(c => [String(c._id), c]))
-  const reserved = await reservedByItem(userId)
-  const cleanItems = []
-  for (const i of wantedItems) {
-    const row = stockById[String(i.stockItemId)]
-    if (!row) return NextResponse.json({ error: 'بعض الأصناف غير موجودة في مخزن هذا المستخدم' }, { status: 400 })
-    const cat = row.catalogItemId ? catById[String(row.catalogItemId)] : null
-    if (!cat) return NextResponse.json({ error: `الصنف ${row.name} غير موجود في جدول الأصناف` }, { status: 400 })
-    const qty = round(Number(i.quantity))
-    const available = round((row.quantity || 0) - (reserved[String(row._id)] || 0))
-    if (qty > available) {
-      return NextResponse.json({ error: `كمية ${cat.name} (${qty}) أكبر من المتاح بالمخزن (${Math.max(0, available)})` }, { status: 400 })
-    }
-    // name / unit / weight / points come from the global جدول الأصناف
-    cleanItems.push({
-      stockItemId: row._id,
-      catalogItemId: cat._id,
-      name: cat.name,
-      unit: cat.unit,
-      weight: cat.weight,
-      quantity: String(qty),
-      points: cat.points || 0,
-    })
+  // The whole المخزن is offered to the beneficiaries (like a supermarket). items[] is only a
+  // snapshot of what was in stock at opening, for the taken / remaining report.
+  const stockRows = (await stockWithReserved(userId)).filter(r => r.inCatalog && r.available > 0)
+  if (!stockRows.length) {
+    return NextResponse.json({ error: 'مخزن هذا المستخدم فارغ — أضف الكميات في المخزن أولًا' }, { status: 400 })
   }
-  const totalPoints = itemsTotalPoints(cleanItems) // Σ الكمية × عدد النقاط
-  const deliveryPoints = casesPoints(cases)       // Σ نقاط الحالات المستفيدة
+  const cleanItems = stockRows.map(r => ({
+    stockItemId: r._id,
+    catalogItemId: r.catalogItemId,
+    name: r.name,
+    unit: r.unit,
+    weight: r.weight,
+    quantity: String(r.available),
+    points: Number(r.points) || 0,
+  }))
+  const deliveryPoints = casesPoints(cases) // Σ نقاط الحالات المستفيدة
 
   const codePrefix = await generateDeliveryPrefix(userId)
   const used = new Set()
@@ -118,8 +99,8 @@ export async function POST(req) {
     location: body.location,
     notes: body.notes,
     scheduledFor: body.scheduledFor || undefined,
+    stockMode: 'live',
     items: cleanItems,
-    totalPoints,
     deliveryPoints,
     userId,
     codePrefix,
