@@ -162,7 +162,7 @@ export default function DeliverBeneficiaryPage() {
       setNotes('')
       setPicks({})
     } else {
-      setError(data.error || 'حدث خطأ')
+      setError(data.error || `حدث خطأ (رمز ${res.status}) — حاول مرة أخرى`)
     }
   }
 

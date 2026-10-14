@@ -5,10 +5,19 @@ import connectDB from '../../../../lib/mongodb'
 import Delivery from '../../../../models/Delivery'
 import '../../../../models/Case'
 import { normalizeCode, migrateLegacyDeliveries } from '../../../../lib/deliveryCode'
-import { remainingPerItem, numQty, itemLimitsFor } from '../../../../lib/stock'
+import { remainingPerItem, numQty, resolveDeliveryItems } from '../../../../lib/stock'
 
 // POST /api/deliveries/verify  { code } — the user looks up a beneficiary by their voucher code
 export async function POST(req) {
+  try {
+    return await verify(req)
+  } catch (err) {
+    console.error('deliveries/verify failed:', err)
+    return NextResponse.json({ error: `خطأ في الخادم: ${err?.message || err}` }, { status: 500 })
+  }
+}
+
+async function verify(req) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
 
@@ -34,20 +43,20 @@ export async function POST(req) {
   const o = delivery.toObject()
   const remaining = remainingPerItem(o)
   const familyMembers = b.caseId?.familyMembers
-  const limits = await itemLimitsFor(o, familyMembers)
+  const rules = await resolveDeliveryItems(o, familyMembers)
   const { code: _c, phone, smsError, smsStatus, smsSentAt, smsGatewayId, smsState, ...beneficiary } = b.toObject()
   return NextResponse.json({
     delivery: {
       _id: o._id, requestNo: o.requestNo, deliveryType: o.deliveryType, amount: o.amount,
       // each item with how much is still left in this delivery for the remaining beneficiaries
       items: (o.items || []).map((it, idx) => ({
-        index: idx, name: it.name, unit: it.unit, points: Number(it.points) || 0,
+        index: idx, name: it.name, unit: rules[idx].unit, points: rules[idx].points,
         quantity: numQty(it.quantity), remaining: Math.max(0, remaining[idx]),
-        limit: limits[idx], // الحد الأقصى for this case's family size (null = no rule)
-        max: limits[idx] === null ? Math.max(0, remaining[idx]) : Math.max(0, Math.min(limits[idx], remaining[idx])),
+        limit: rules[idx].limit, // الحد الأقصى for this case's family size (null = no rule)
+        max: rules[idx].limit === null ? Math.max(0, remaining[idx]) : Math.max(0, Math.min(rules[idx].limit, remaining[idx])),
       })),
       familyMembers: familyMembers ?? null,
-      needsFamilySize: limits.some((l, i) => l === null && o.items[i]?.catalogItemId),
+      needsFamilySize: rules.some(r => r.linked && r.limit === null),
       location: o.location, scheduledFor: o.scheduledFor, notes: o.notes,
       total: o.beneficiaries.length,
       delivered: o.beneficiaries.filter(x => x.status === 'delivered').length,

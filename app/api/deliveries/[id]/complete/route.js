@@ -15,7 +15,17 @@ import { remainingPerItem, round, resolveDeliveryItems } from '../../../../../li
 //   - Σ quantity × points is deducted from the case's points (must be enough)
 //   - the quantities are deducted from the user's المخزن
 // The delivery closes when all beneficiaries have received.
-export async function POST(req, { params }) {
+export async function POST(req, ctx) {
+  try {
+    return await complete(req, ctx)
+  } catch (err) {
+    // never fail silently: log it and show the reason on the page
+    console.error('deliveries/complete failed:', err)
+    return NextResponse.json({ error: `خطأ في الخادم: ${err?.message || err}` }, { status: 500 })
+  }
+}
+
+async function complete(req, { params }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
 
@@ -108,7 +118,14 @@ export async function POST(req, { params }) {
   b.pointsUsed = pointsUsed
   if (notes) b.notes = notes
   closeIfComplete(delivery)
-  await delivery.save()
+  try {
+    await delivery.save({ validateModifiedOnly: true })
+  } catch (err) {
+    // undo the stock / points deductions so nothing is lost
+    await rollback()
+    if (pointsUsed > 0) await Case.updateOne({ _id: caseDoc._id }, { $inc: { points: pointsUsed } })
+    throw err
+  }
 
   return NextResponse.json({
     ok: true,
