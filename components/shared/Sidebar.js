@@ -204,6 +204,12 @@ export default function Sidebar({ isAdmin = false }) {
             >
               <span>→</span> كل المستخدمين
             </Link>
+            <Link
+              href="/admin/catalog"
+              className="flex items-center gap-2 px-4 py-2 mb-3 rounded-lg text-sm text-primary-50 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <span>▦</span> جدول الأصناف والحدود
+            </Link>
             <p className="px-4 mb-2 text-xs text-primary-100">إدارة المستخدم</p>
             <ul className="space-y-1">{workspaceNavItems}</ul>
           </>
